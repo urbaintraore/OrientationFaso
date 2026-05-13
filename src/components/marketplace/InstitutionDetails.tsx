@@ -40,7 +40,17 @@ export function InstitutionDetails({ institutionId, onBack }: InstitutionDetails
             postService.getPostsByEstablishment(institutionId)
           ]);
           setUfrs(ufrData);
-          setPrograms(programData);
+          
+          // Merge Firestore programs with local programs if available
+          const mergedPrograms = [...programData];
+          if (currentInst.programs && currentInst.programs.length > 0) {
+            currentInst.programs.forEach(localProg => {
+              if (!mergedPrograms.find(p => p.name === localProg.name)) {
+                mergedPrograms.push(localProg);
+              }
+            });
+          }
+          setPrograms(mergedPrograms);
           setPosts(postData);
         }
       } catch (error) {
@@ -170,7 +180,7 @@ export function InstitutionDetails({ institutionId, onBack }: InstitutionDetails
               onClick={() => setActiveTab('programs')}
               className={`px-4 py-3 font-black text-[10px] uppercase tracking-widest whitespace-nowrap border-b-2 transition-all ${activeTab === 'programs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
             >
-              Filières ({(programs.length || programsCount)})
+              Filières ({Math.max(programs.length, institution.programsCount || 0)})
             </button>
             {posts.length > 0 && (
               <button 

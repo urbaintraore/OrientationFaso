@@ -181,6 +181,11 @@ service cloud.firestore {
       allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
     }
 
+    match /government_opportunities/{opportunityId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
     match /employment_trends/{trendId} {
       allow read: if true;
       allow write: if isAdmin();

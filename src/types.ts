@@ -297,6 +297,30 @@ export interface SavedProject {
   result: AnalysisResult | UniversityAnalysisResult;
 }
 
+export type GovernmentOpportunityType = 'bourse' | 'aide' | 'prêt' | 'concours' | 'autre';
+export type GovernmentOpportunityStatus = 'ouverte' | 'bientôt expirée' | 'expirée' | 'résultats disponibles';
+
+export interface GovernmentOpportunity {
+  id: string;
+  title: string;
+  type: GovernmentOpportunityType;
+  organization: string;
+  description: string;
+  eligibility: string;
+  requiredDocuments: string[];
+  deadline: string;
+  officialUrl: string;
+  pdfUrl?: string;
+  thumbnail?: string;
+  status: GovernmentOpportunityStatus;
+  source: 'CIOSPB' | 'FOSER' | 'Gouvernement';
+  levelConcerns?: string[]; // e.g. ["Bachelor", "Master"]
+  countryConcerns?: string[];
+  createdAt: string;
+  updatedAt: string;
+  isVerified: boolean;
+}
+
 export interface Scholarship {
   id: string;
   title: string;

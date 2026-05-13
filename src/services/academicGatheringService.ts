@@ -28,19 +28,20 @@ export const academicGatheringService = {
       ${rawContent}
       
       MISSION :
-      1. Extraire les détails de l'établissement.
+      1. Extraire les détails de l'établissement (Nom, Type, Pays, Ville, etc.).
       2. Lister toutes les filières (programmes) détectées.
       3. Compter précisément le nombre de filières.
-      4. Déterminer les niveaux (BTS, Licence, Master, Doctorat).
-      5. Associer un score d'employabilité (0-100) et une tendance (Très Forte Demande, etc.) pour chaque filière selon le marché du Burkina Faso.
+      4. Déterminer les niveaux (BTS, Licence, Master, Doctorat, PhD).
+      5. Associer un score d'employabilité (0-100) et une tendance (Très Forte Demande, etc.) pour chaque filière selon le marché du pays concerné (${sourceUrl}).
 
       FORMAT JSON ATTENDU :
       {
         "institution": {
           "name": "Nom complet",
           "type": "Université Publique" | "Université Privée" | "Grande École" | "Institut",
-          "description": "Résumé",
-          "city": "Ville (Burkina Faso)",
+          "description": "Résumé d'excellence",
+          "city": "Ville réelle",
+          "country": "Pays réel",
           "address": "...",
           "phone": "...",
           "email": "...",
@@ -52,7 +53,7 @@ export const academicGatheringService = {
             "instagram": "..."
           },
           "programsCount": 123,
-          "degrees": ["BTS", "Licence", "..."]
+          "degrees": ["Licence", "Master", "PhD", "..."]
         },
         "programs": [
           {
@@ -71,7 +72,7 @@ export const academicGatheringService = {
 
     try {
       const response = await getAiClient().models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-3-flash-preview",
         contents: prompt,
         config: { responseMimeType: "application/json" }
       });
@@ -89,61 +90,80 @@ export const academicGatheringService = {
    */
   async saveCrawledData(data: { institution: Partial<Institution>; programs: Partial<Program>[] }) {
     try {
-      // 1. Check if institution exists
-      const q = query(collection(db, 'institutions'), where('name', '==', data.institution.name));
-      const snap = await getDocs(q);
+      if (!data.institution.name) throw new Error("Nom de l'établissement manquant.");
+
+      // 1. Check if institution exists with a more robust check (normalized name + city)
+      const normalizedName = data.institution.name.trim().toLowerCase();
+      const institutionsQuery = query(collection(db, 'institutions'));
+      const institutionsSnap = await getDocs(institutionsQuery);
+      
+      let existingInstDoc = institutionsSnap.docs.find(doc => {
+        const d = doc.data();
+        return (d.name?.trim().toLowerCase() === normalizedName) || 
+               (d.website && data.institution.website && d.website.includes(new URL(data.institution.website).hostname));
+      });
       
       let institutionId: string;
       
-      if (snap.empty) {
+      if (!existingInstDoc) {
         institutionId = await institutionService.addInstitution({
           ...data.institution,
-          logo: `https://logo.clearbit.com/${new URL(data.institution.website || '').hostname}`,
+          logo: data.institution.website ? `https://logo.clearbit.com/${new URL(data.institution.website).hostname}` : 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1200',
           coverImage: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1200',
           isVerified: false,
           tier: 'Free',
           overallRating: 4.0,
           reputationScore: 80,
           employabilityRate: 85,
-          accreditations: ['CAMES'],
+          accreditations: data.institution.accreditations || ['CAMES'],
           reviews: [],
           gallery: [],
-          socialLinks: {},
-          establishedYear: 2000,
-          studentCount: 1000,
+          socialLinks: data.institution.socialLinks || {},
+          establishedYear: data.institution.establishedYear || 2000,
+          studentCount: data.institution.studentCount || 1000,
           contactEmail: data.institution.email || '',
           contactPhone: data.institution.phone || '',
-          country: 'Burkina Faso'
+          country: data.institution.country || 'Burkina Faso'
         } as any);
       } else {
-        institutionId = snap.docs[0].id;
-        // Update counts if needed
+        institutionId = existingInstDoc.id;
+        // Update metadata if needed
         await institutionService.updateInstitution(institutionId, { 
-          programsCount: data.institution.programsCount,
-          degrees: data.institution.degrees,
-          socialLinks: data.institution.socialLinks || snap.docs[0].data().socialLinks
+          programsCount: Math.max((data.institution.programsCount || 0), (existingInstDoc.data().programsCount || 0)),
+          degrees: Array.from(new Set([...(data.institution.degrees || []), ...(existingInstDoc.data().degrees || [])])),
+          socialLinks: { ...existingInstDoc.data().socialLinks, ...data.institution.socialLinks }
         });
       }
 
-      // 2. Add programs
+      // 2. Add programs with duplicate check per institution
+      const existingProgramsQuery = query(collection(db, 'programs'), where('institutionId', '==', institutionId));
+      const existingProgramsSnap = await getDocs(existingProgramsQuery);
+      const existingProgramNames = new Set(existingProgramsSnap.docs.map(d => d.data().name?.trim().toLowerCase()));
+
       for (const prog of data.programs) {
-        const pq = query(collection(db, 'programs'), 
-          where('institutionId', '==', institutionId), 
-          where('name', '==', prog.name)
-        );
-        const psnap = await getDocs(pq);
-        if (psnap.empty) {
+        if (!prog.name) continue;
+        const normalizedProgName = prog.name.trim().toLowerCase();
+        
+        if (!existingProgramNames.has(normalizedProgName)) {
           await programService.addProgram({
             ...prog,
             institutionId,
-            tuitionFee: 0,
-            skills: [],
-            averageSalary: 'A discuter',
-            admissionCriteria: 'Dossier',
+            tuitionFee: prog.tuitionFee || 0,
+            skills: prog.skills || [],
+            averageSalary: prog.averageSalary || 'A discuter',
+            admissionCriteria: prog.admissionCriteria || 'Dossier',
             createdAt: new Date().toISOString()
           } as any);
+          existingProgramNames.add(normalizedProgName);
         }
       }
+
+      // 3. Update the exact program count on the institution
+      const finalCountQuery = query(collection(db, 'programs'), where('institutionId', '==', institutionId));
+      const finalCountSnap = await getDocs(finalCountQuery);
+      await institutionService.updateInstitution(institutionId, { 
+        programsCount: finalCountSnap.size
+      });
       
       return institutionId;
     } catch (error) {
@@ -182,7 +202,7 @@ export const academicGatheringService = {
         }`;
 
         const response = await getAiClient().models.generateContent({
-          model: "gemini-3.1-pro-preview",
+          model: "gemini-3-flash-preview",
           contents: prompt,
           config: { responseMimeType: "application/json" }
         });
@@ -196,5 +216,62 @@ export const academicGatheringService = {
       }
     }
     return results;
+  },
+
+  /**
+   * Cleans duplicates in the institutions collection by merging them.
+   */
+  async cleanDuplicates() {
+    const q = query(collection(db, 'institutions'));
+    const snap = await getDocs(q);
+    
+    const records = snap.docs.map(doc => ({ id: doc.id, data: doc.data() as Institution }));
+    const uniqueMap = new Map<string, { id: string; data: Institution }>();
+    const toDelete: string[] = [];
+    let mergedCount = 0;
+
+    for (const record of records) {
+      // Create a unique key based on normalized name and city
+      const key = `${record.data.name?.trim().toLowerCase()}_${record.data.city?.trim().toLowerCase()}`;
+      
+      if (uniqueMap.has(key)) {
+        const primary = uniqueMap.get(key)!;
+        // Merge programs from the duplicate to the primary
+        const dupeProgramsQuery = query(collection(db, 'programs'), where('institutionId', '==', record.id));
+        const dupeProgramsSnap = await getDocs(dupeProgramsQuery);
+        
+        for (const pDoc of dupeProgramsSnap.docs) {
+          const pData = pDoc.data() as Program;
+          // Check if primary already has this program
+          const primaryProgramsQuery = query(collection(db, 'programs'), 
+            where('institutionId', '==', primary.id),
+            where('name', '==', pData.name)
+          );
+          const primaryProgramsSnap = await getDocs(primaryProgramsQuery);
+          
+          if (primaryProgramsSnap.empty) {
+            await programService.addProgram({ ...pData, institutionId: primary.id });
+          }
+          // Delete program from duplicate institution
+          await programService.deleteProgram(pDoc.id);
+        }
+        
+        // Delete the duplicate institution
+        await institutionService.deleteInstitution(record.id);
+        toDelete.push(record.id);
+        mergedCount++;
+      } else {
+        uniqueMap.set(key, record);
+      }
+    }
+
+    // Update programsCount for all primary institutions
+    for (const primary of uniqueMap.values()) {
+      const countQuery = query(collection(db, 'programs'), where('institutionId', '==', primary.id));
+      const countSnap = await getDocs(countQuery);
+      await institutionService.updateInstitution(primary.id, { programsCount: countSnap.size });
+    }
+
+    return { removed: mergedCount };
   }
 };

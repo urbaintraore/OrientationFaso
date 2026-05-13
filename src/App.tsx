@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { Header, Footer } from './components/Layout';
 import { Partners } from './components/Partners';
 import { Hero } from './components/Hero';
+import { ScholarshipLanding } from './components/ScholarshipLanding';
 import { AssessmentForm } from './components/AssessmentForm';
 import { PostBacForm } from './components/PostBacForm';
 import { ResultsDashboard } from './components/ResultsDashboard';
@@ -20,7 +21,7 @@ import { ProjectList } from './components/ProjectList';
 import { MarketplaceHub } from './components/marketplace/MarketplaceHub';
 import { InstitutionDetails } from './components/marketplace/InstitutionDetails';
 import { EstablishmentDashboard } from './components/establishment/EstablishmentDashboard';
-import { ScholarshipIntelligence } from './components/ScholarshipIntelligence';
+import { ScholarshipHub } from './components/opportunities/ScholarshipHub';
 import { AboutPage } from './components/AboutPage';
 import { analyzeProfile, analyzePostBacProfile } from './services/gemini';
 import { StudentProfile, AnalysisResult, PostBacProfile, UniversityAnalysisResult, SavedProject, UserProfile } from './types';
@@ -407,6 +408,10 @@ export default function App() {
             >
               <Hero onStart={handleStart} />
               <Partners />
+              <ScholarshipLanding onExplore={(query) => {
+                setView('scholarships');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }} />
             </motion.div>
           )}
 
@@ -653,7 +658,7 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <ScholarshipIntelligence 
+              <ScholarshipHub 
                 isAdmin={isAdmin} 
                 userProfile={selectedMode === 'bepc' ? bepcProfile : (selectedMode === 'bac' ? bacProfile : null)}
               />

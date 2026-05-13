@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Users, CreditCard, CheckCircle, XCircle, Search, Trash2, Plus, X, Eye, GraduationCap, School, Calendar, Filter, Download, FileText, TrendingUp, AlertTriangle, ToggleLeft as ToggleLeftIcon, ToggleRight as ToggleRightIcon, Loader2, RefreshCw, Zap, Sparkles, Building2, Bell } from 'lucide-react';
+import { Users, CreditCard, CheckCircle, XCircle, Search, Trash2, Plus, X, Eye, GraduationCap, School, Calendar, Filter, Download, FileText, TrendingUp, AlertTriangle, ToggleLeft as ToggleLeftIcon, ToggleRight as ToggleRightIcon, Loader2, RefreshCw, Zap, Sparkles, Building2, Bell, ShieldCheck, AlertCircle } from 'lucide-react';
 import { AnalysisResult, UniversityAnalysisResult } from '../types';
 import { mockInstitutions } from '../data/mockInstitutions';
 import { jsPDF } from 'jspdf';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { academicGatheringService } from '../services/academicGatheringService';
+import { governmentGatheringService } from '../services/governmentGatheringService';
 import { notificationService } from '../services/notificationService';
 import { crawlInstitutions } from '../services/gemini';
 
@@ -454,13 +455,63 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   };
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'users' | 'payments' | 'institutions' | 'notifications' | 'intelligence'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'payments' | 'institutions' | 'notifications' | 'intelligence' | 'gov_sync'>('users');
   
   // Intelligence state
   const [intelUrl, setIntelUrl] = useState('');
   const [intelStatus, setIntelStatus] = useState('');
   const [isIntelRunning, setIsIntelRunning] = useState(false);
   const [intelStats, setIntelStats] = useState({ institutions: 0, programs: 0 });
+
+  // Gov Sync state
+  const [isGovSyncRunning, setIsGovSyncRunning] = useState(false);
+  const [govSyncStatus, setGovSyncStatus] = useState('');
+  const [govSyncResult, setGovSyncResult] = useState<{ added: number; updated: number; errors: string[] } | null>(null);
+
+  const handleGovSync = async () => {
+    setIsGovSyncRunning(true);
+    setGovSyncStatus('Analyse en cours des sites gouvernementaux (CIOSPB, FOSER)...');
+    try {
+      const results = await governmentGatheringService.gatherAll();
+      if (results) {
+        setGovSyncResult(results);
+        setGovSyncStatus('Synchronisation terminée avec succès.');
+        
+        // Notify users if new offers were found
+        if (results.added > 0) {
+          await notificationService.sendNotification({
+            title: "Nouvelles opportunités gouvernementales !",
+            message: `${results.added} bourses/aides ont été ajoutées sur la plateforme.`,
+            category: 'scholarship',
+            target: 'all',
+            link: 'scholarships'
+          });
+        }
+      } else {
+        throw new Error("Aucun résultat retourné par le service.");
+      }
+    } catch (error: any) {
+      console.error(error);
+      setGovSyncStatus(`Erreur lors de la synchronisation: ${error.message || 'Erreur inconnue'}`);
+      setGovSyncResult({ added: 0, updated: 0, errors: [error.message || 'Erreur inconnue'] });
+    } finally {
+      setIsGovSyncRunning(false);
+    }
+  };
+
+  const handleCleanDuplicates = async () => {
+    if (!window.confirm("Voulez-vous fusionner les établissements en double ? Cette action est irréversible.")) return;
+    setLoadingInstitutions(true);
+    try {
+      const res = await academicGatheringService.cleanDuplicates();
+      alert(`Nettoyage terminé : ${res.removed} doublons supprimés.`);
+      fetchRealInstitutions();
+    } catch (e) {
+      alert("Erreur lors du nettoyage.");
+    } finally {
+      setLoadingInstitutions(false);
+    }
+  };
 
   const handleRunIntel = async () => {
     if (!intelUrl) return;
@@ -1193,6 +1244,14 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
             >
               Établissements
             </button>
+            {activeTab === 'institutions' && (
+              <button
+                onClick={handleCleanDuplicates}
+                className="px-3 py-1 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase hover:bg-red-100 transition-colors border border-red-100"
+              >
+                Nettoyer Doublons
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('intelligence')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -1202,6 +1261,16 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
               }`}
             >
               Intelligence Académique
+            </button>
+            <button
+              onClick={() => setActiveTab('gov_sync')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'gov_sync' 
+                  ? 'bg-red-50 text-red-600' 
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              Opportunités Gov (Sync)
             </button>
           </div>
           
@@ -1369,8 +1438,8 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                     <Zap className="w-8 h-8" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Collecteur Intelligent</h3>
-                    <p className="text-sm text-slate-500 font-medium">Entrez une URL d'un établissement pour extraire automatiquement ses données.</p>
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Collecteur Académique Mondial</h3>
+                    <p className="text-sm text-slate-500 font-medium">Entrez une URL ou un pays/région (France, USA, Canada, Chine, Japon...) pour parcourir le monde.</p>
                   </div>
                 </div>
 
@@ -1395,7 +1464,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       ) : (
                         <Sparkles className="w-4 h-4" />
                       )}
-                      Lancer
+                      Explorer le Monde
                     </button>
                     <button
                       onClick={handleSyncBurkina}
@@ -1404,6 +1473,19 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                     >
                       <RefreshCw className={`w-4 h-4 ${isIntelRunning ? 'animate-spin' : ''}`} />
                       Sync Burkina
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const randomCountries = ['France', 'USA', 'Canada', 'Chine', 'Japon', 'Allemagne', 'Sénégal', 'Côte d\'Ivoire'];
+                        const country = randomCountries[Math.floor(Math.random() * randomCountries.length)];
+                        setIntelUrl(country);
+                        setTimeout(() => handleRunIntel(), 100);
+                      }}
+                      disabled={isIntelRunning}
+                      className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-900 transition-all shadow-xl shadow-indigo-600/10 flex items-center gap-3"
+                    >
+                      <Sparkles className={`w-4 h-4 ${isIntelRunning ? 'animate-pulse' : ''}`} />
+                      Sync Monde
                     </button>
                     <button
                       onClick={async () => {
@@ -1446,6 +1528,87 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                   <div className="text-3xl font-black text-slate-900">{intelStats.programs}</div>
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filières Indexées</div>
                 </div>
+              </div>
+            </div>
+          ) : activeTab === 'gov_sync' ? (
+            <div className="p-8 max-w-4xl mx-auto">
+              <div className="bg-red-50 border border-red-100 rounded-3xl p-8 mb-8">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="p-3 bg-red-600 text-white rounded-2xl shadow-lg">
+                    <RefreshCw className={`w-8 h-8 ${isGovSyncRunning ? 'animate-spin' : ''}`} />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Synchronisation Gouvernementale</h3>
+                    <p className="text-sm text-slate-500 font-medium">Récupérez automatiquement les bourses du CIOSPB et les aides du FOSER.</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-white rounded-2xl border border-red-100 shadow-sm">
+                      <div className="flex items-center gap-3 mb-2">
+                        <ShieldCheck className="w-5 h-5 text-red-500" />
+                        <span className="font-bold text-slate-900">CIOSPB</span>
+                      </div>
+                      <p className="text-xs text-slate-500">Source: https://www.ciospb.gov.bf</p>
+                    </div>
+                    <div className="p-4 bg-white rounded-2xl border border-red-100 shadow-sm">
+                      <div className="flex items-center gap-3 mb-2">
+                        <ShieldCheck className="w-5 h-5 text-blue-500" />
+                        <span className="font-bold text-slate-900">FOSER</span>
+                      </div>
+                      <p className="text-xs text-slate-500">Source: https://foser.bf</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleGovSync}
+                    disabled={isGovSyncRunning}
+                    className="w-full bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-slate-900 transition-all shadow-xl shadow-red-600/20 disabled:opacity-50 flex items-center justify-center gap-3"
+                  >
+                    {isGovSyncRunning ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-5 h-5" />
+                    )}
+                    Synchroniser Maintenant
+                  </button>
+                </div>
+
+                {govSyncStatus && (
+                  <div className="mt-6 p-4 bg-white/50 rounded-xl border border-red-100 flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${isGovSyncRunning ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+                    <span className="text-sm font-bold text-slate-700">{govSyncStatus}</span>
+                  </div>
+                )}
+
+                {govSyncResult && (
+                  <div className="mt-6 grid grid-cols-3 gap-4">
+                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-center">
+                      <div className="text-2xl font-black text-emerald-600">{govSyncResult.added}</div>
+                      <div className="text-[10px] font-black uppercase text-emerald-700">Nouvelles Offres</div>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 text-center">
+                      <div className="text-2xl font-black text-blue-600">{govSyncResult.updated}</div>
+                      <div className="text-[10px] font-black uppercase text-blue-700">Mises à Jour</div>
+                    </div>
+                    <div className="p-4 bg-red-50 rounded-2xl border border-red-100 text-center">
+                      <div className="text-2xl font-black text-red-600">{govSyncResult.errors.length}</div>
+                      <div className="text-[10px] font-black uppercase text-red-700">Erreurs</div>
+                    </div>
+                  </div>
+                )}
+                
+                {govSyncResult && govSyncResult.errors.length > 0 && (
+                  <div className="mt-4 p-4 bg-red-50 rounded-xl border border-red-100">
+                    <div className="text-xs font-black text-red-700 uppercase mb-2 flex items-center gap-2">
+                       <AlertCircle className="w-4 h-4" /> Détails des erreurs
+                    </div>
+                    <ul className="text-xs text-red-600 space-y-1">
+                      {govSyncResult.errors.map((err, i) => <li key={i}>{err}</li>)}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           ) : activeTab === 'users' ? (

@@ -133,67 +133,67 @@ export async function analyzeProfile(profile: StudentProfile): Promise<AnalysisR
 
   try {
     const response = await getAiClient().models.generateContent({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
-        properties: {
-          recommendedSeries: { type: Type.STRING },
-          top3Series: {
-            type: Type.ARRAY,
-            items: {
+          properties: {
+            recommendedSeries: { type: Type.STRING },
+            top3Series: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  series: { type: Type.STRING },
+                  score: { type: Type.NUMBER },
+                  matchReason: { type: Type.STRING },
+                }
+              }
+            },
+            bacSuccessProbability: { type: Type.NUMBER },
+            bacMentionProbability: { type: Type.NUMBER },
+            motivationMessage: { type: Type.STRING },
+            risks: { type: Type.ARRAY, items: { type: Type.STRING } },
+            improvementTips: { type: Type.ARRAY, items: { type: Type.STRING } },
+            analysis: {
               type: Type.OBJECT,
               properties: {
-                series: { type: Type.STRING },
-                score: { type: Type.NUMBER },
-                matchReason: { type: Type.STRING },
+                regularity: { type: Type.STRING },
+                dominance: { type: Type.STRING },
+                progression: { type: Type.STRING },
               }
-            }
-          },
-          bacSuccessProbability: { type: Type.NUMBER },
-          bacMentionProbability: { type: Type.NUMBER },
-          motivationMessage: { type: Type.STRING },
-          risks: { type: Type.ARRAY, items: { type: Type.STRING } },
-          improvementTips: { type: Type.ARRAY, items: { type: Type.STRING } },
-          analysis: {
-            type: Type.OBJECT,
-            properties: {
-              regularity: { type: Type.STRING },
-              dominance: { type: Type.STRING },
-              progression: { type: Type.STRING },
-            }
-          },
-          testimonials: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                author: { type: Type.STRING },
-                role: { type: Type.STRING },
-                quote: { type: Type.STRING },
+            },
+            testimonials: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  author: { type: Type.STRING },
+                  role: { type: Type.STRING },
+                  quote: { type: Type.STRING },
+                }
               }
-            }
-          },
-          usefulLinks: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                url: { type: Type.STRING },
+            },
+            usefulLinks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  url: { type: Type.STRING },
+                }
               }
-            }
-          },
-          projectedBacAverage: { type: Type.NUMBER },
-          suitableUniversityMajors: { type: Type.ARRAY, items: { type: Type.STRING } },
-          futureJobOpportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
-          estimatedIncomeLevel: { type: Type.STRING }
+            },
+            projectedBacAverage: { type: Type.NUMBER },
+            suitableUniversityMajors: { type: Type.ARRAY, items: { type: Type.STRING } },
+            futureJobOpportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
+            estimatedIncomeLevel: { type: Type.STRING }
+          }
         }
       }
-    }
-  });
+    });
 
     console.log("Raw API Response (BEPC):", response.text);
 
@@ -204,6 +204,9 @@ export async function analyzeProfile(profile: StudentProfile): Promise<AnalysisR
     throw new Error("Failed to generate analysis: empty response");
   } catch (error: any) {
     console.error("Gemini API Error (BEPC):", error);
+    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429')) {
+      throw new Error("Quota Gemini dépassé. Veuillez patienter ou utiliser une clé API avec facturation activée dans les Paramètres > Secrets.");
+    }
     throw new Error(`Erreur API Gemini: ${error.message || "Erreur inconnue"}`);
   }
 }
@@ -292,82 +295,82 @@ export async function analyzePostBacProfile(profile: PostBacProfile): Promise<Un
 
   try {
     const response = await getAiClient().models.generateContent({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
-        properties: {
-          recommendedMajors: {
-            type: Type.ARRAY,
-            items: {
+          properties: {
+            recommendedMajors: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  major: { type: Type.STRING },
+                  score: { type: Type.NUMBER },
+                  matchReason: { type: Type.STRING },
+                }
+              }
+            },
+            successProbability: { type: Type.NUMBER },
+            justification: { type: Type.STRING },
+            opportunities: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  requiredSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  averageSalary: { type: Type.STRING },
+                  demandLevel: { type: Type.STRING },
+                  automationRisk: { type: Type.STRING },
+                  internationalOpportunities: { type: Type.STRING },
+                  jobVideoUrl: { type: Type.STRING },
+                  careerRoadmap: { type: Type.ARRAY, items: { type: Type.STRING } },
+                }
+              }
+            },
+            employabilityRating: { type: Type.STRING },
+            strategicAdvice: { type: Type.ARRAY, items: { type: Type.STRING } },
+            testimonials: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  author: { type: Type.STRING },
+                  role: { type: Type.STRING },
+                  quote: { type: Type.STRING },
+                }
+              }
+            },
+            usefulLinks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  url: { type: Type.STRING },
+                }
+              }
+            },
+            universities: {
               type: Type.OBJECT,
               properties: {
-                major: { type: Type.STRING },
-                score: { type: Type.NUMBER },
-                matchReason: { type: Type.STRING },
+                burkinaPublic: { type: Type.ARRAY, items: { type: Type.STRING } },
+                burkinaPrivate: { type: Type.ARRAY, items: { type: Type.STRING } },
+                africa: { type: Type.ARRAY, items: { type: Type.STRING } },
+                europe: { type: Type.ARRAY, items: { type: Type.STRING } },
+                usa: { type: Type.ARRAY, items: { type: Type.STRING } },
+                asia: { type: Type.ARRAY, items: { type: Type.STRING } },
+                canada: { type: Type.ARRAY, items: { type: Type.STRING } },
               }
-            }
-          },
-          successProbability: { type: Type.NUMBER },
-          justification: { type: Type.STRING },
-          opportunities: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                description: { type: Type.STRING },
-                requiredSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
-                averageSalary: { type: Type.STRING },
-                demandLevel: { type: Type.STRING },
-                automationRisk: { type: Type.STRING },
-                internationalOpportunities: { type: Type.STRING },
-                jobVideoUrl: { type: Type.STRING },
-                careerRoadmap: { type: Type.ARRAY, items: { type: Type.STRING } },
-              }
-            }
-          },
-          employabilityRating: { type: Type.STRING },
-          strategicAdvice: { type: Type.ARRAY, items: { type: Type.STRING } },
-          testimonials: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                author: { type: Type.STRING },
-                role: { type: Type.STRING },
-                quote: { type: Type.STRING },
-              }
-            }
-          },
-          usefulLinks: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                url: { type: Type.STRING },
-              }
-            }
-          },
-          universities: {
-            type: Type.OBJECT,
-            properties: {
-              burkinaPublic: { type: Type.ARRAY, items: { type: Type.STRING } },
-              burkinaPrivate: { type: Type.ARRAY, items: { type: Type.STRING } },
-              africa: { type: Type.ARRAY, items: { type: Type.STRING } },
-              europe: { type: Type.ARRAY, items: { type: Type.STRING } },
-              usa: { type: Type.ARRAY, items: { type: Type.STRING } },
-              asia: { type: Type.ARRAY, items: { type: Type.STRING } },
-              canada: { type: Type.ARRAY, items: { type: Type.STRING } },
             }
           }
         }
       }
-    }
-  });
+    });
 
     console.log("Raw API Response (BAC):", response.text);
 
@@ -378,6 +381,9 @@ export async function analyzePostBacProfile(profile: PostBacProfile): Promise<Un
     throw new Error("Failed to generate university analysis: empty response");
   } catch (error: any) {
     console.error("Gemini API Error (BAC):", error);
+    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429')) {
+      throw new Error("Quota Gemini dépassé. Veuillez patienter ou utiliser une clé API avec facturation activée.");
+    }
     throw new Error(`Erreur API Gemini: ${error.message || "Erreur inconnue"}`);
   }
 }
@@ -420,7 +426,7 @@ export async function analyzeScholarship(rawContent: string): Promise<Partial<Sc
 
   try {
     const response = await getAiClient().models.generateContent({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json"
@@ -433,6 +439,9 @@ export async function analyzeScholarship(rawContent: string): Promise<Partial<Sc
     throw new Error("Empty response from AI");
   } catch (error: any) {
     console.error("Gemini Scholarship Analysis Error:", error);
+    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429')) {
+      throw new Error("Quota Gemini dépassé pour l'analyse de bourse.");
+    }
     throw error;
   }
 }
@@ -440,22 +449,22 @@ export async function analyzeScholarship(rawContent: string): Promise<Partial<Sc
 export async function crawlInstitutions(region: string): Promise<any[]> {
   console.log(`[IA-FEED] Lancement de l'exploration pour: ${region}`);
   const prompt = `
-    Tu es un crawler intelligent spécialisé dans l'éducation en Afrique et particulièrement au Burkina Faso.
-    Génère une liste de 10 institutions d'enseignement supérieur (Universités, Écoles, Instituts, Centres) RÉELLES pour la région : ${region}.
+    Tu es un crawler intelligent spécialisé dans l'éducation mondiale (Afrique, Europe, Amérique, Asie).
+    Génère une liste de 15 institutions d'enseignement supérieur (Universités, Écoles, Instituts) RÉELLES pour la région ou le pays : ${region}.
     
-    POUR LE BURKINA FASO, tu DOIS inclure :
-    - Des établissements publics (ex: Université Joseph Ki-Zerbo, UNZ, UPB)
-    - Des établissements privés (ex: USTB, Aube Nouvelle, BIT, ISGE)
-    - Des universités, grandes écoles, instituts et centres professionnels (ex: 2IE, ENEP, ENAM)
+    INSTRUCTIONS SPÉCIFIQUES :
+    - Si la région est le "Burkina Faso", inclus des établissements publics (UJKZ, UNZ, UPB) et privés (USTB, Aube Nouvelle, BIT, ISGE).
+    - Si la région est internationale (France, USA, Canada, Japon, etc.), choisis les universités les plus renommées et réelles du pays.
+    - Sois précis sur les noms, les villes et les sites web officiels.
     
     Pour chaque institution, fournis des données détaillées selon ce format JSON (ARRAY) :
     {
       "name": "Nom complet de l'établissement",
-      "type": "Université Publique" | "Université Privée" | "Grande École" | "Institut Privé" | "Centre Professionnel" | "École de Santé" | "Lycée Technique",
+      "type": "Université Publique" | "Université Privée" | "Grande École" | "Institut Privé" | "Centre Professionnel" | "École de Santé",
       "description": "2-3 phrases sur l'excellence et les spécialités de l'école (réel)",
-      "city": "Ville (ex: Ouagadougou, Bobo-Dioulasso, Koudougou)",
-      "country": "Burkina Faso",
-      "address": "Adresse réelle (ex: Secteur 15, Zogona...)",
+      "city": "Ville réelle",
+      "country": "Pays réel",
+      "address": "Adresse réelle ou quartier",
       "website": "URL réelle du site web officiel",
       "establishedYear": Année de création,
       "studentCount": Nombre approximatif d'étudiants,
@@ -464,12 +473,12 @@ export async function crawlInstitutions(region: string): Promise<any[]> {
       "reputationScore": Score IA entre 80 et 100,
       "tier": "Premium" | "Sponsored" | "Free",
       "isVerified": true,
-      "accreditations": ["CAMES", "Ministère de l'Enseignement Supérieur", "..."],
+      "accreditations": ["Accréditation 1", "Accréditation 2"],
       "scholarshipsAvailable": boolean,
       "contactEmail": "email@school.com",
-      "contactPhone": "Numéro de téléphone (+226...)",
+      "contactPhone": "Numéro de téléphone au format international",
       "socialLinks": {
-        "facebook": "URL de la page Facebook officielle",
+        "facebook": "URL Facebook",
         "linkedin": "URL Linkedin",
         "twitter": "URL Twitter/X"
       },
@@ -483,23 +492,23 @@ export async function crawlInstitutions(region: string): Promise<any[]> {
           "field": "Domaine (Informatique, Management, Santé...)",
           "level": "Licence/Master/BTS",
           "duration": "3 ans",
-          "tuitionFee": 0, // En FCFA par an (Approx)
+          "tuitionFee": 0,
           "description": "Objectifs de la formation",
           "skills": ["Compétence 1", "Compétence 2"],
           "careerOpportunities": ["Débouché 1", "Débouché 2", "Débouché 3"],
-          "admissionCriteria": "Critères (ex: Bac C, D, Concours...)",
-          "averageSalary": "Fourchette salaire local mensuel",
+          "admissionCriteria": "Critères d'admission",
+          "averageSalary": "Fourchette salaire mensuel moyen",
           "employmentRate": 90
         }
-      ]
+      ] // INSTRUCTION : Génère au moins 10 à 20 filières RÉELLES pour chaque établissement. Sois exhaustif.
     }
 
-    IMPORTANT : Ne génère que des données RÉELLES et VERIFIEES pour le Burkina Faso.
+    IMPORTANT : Ne génère que des données RÉELLES et VERIFIEES. Ne pas inventer d'établissements.
   `;
 
   try {
     const response = await getAiClient().models.generateContent({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json"
@@ -510,8 +519,11 @@ export async function crawlInstitutions(region: string): Promise<any[]> {
       return parseResponse<any[]>(response.text);
     }
     return [];
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Crawl Error:", error);
+    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429')) {
+      console.warn("Quota Gemini dépassé pour l'exploration des institutions.");
+    }
     return [];
   }
 }
@@ -559,7 +571,7 @@ export async function crawlScholarshipMarket(academicYears: string[] = ['2025/20
 
   try {
     const response = await getAiClient().models.generateContent({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json"
@@ -570,8 +582,87 @@ export async function crawlScholarshipMarket(academicYears: string[] = ['2025/20
       return parseResponse<any[]>(response.text);
     }
     return [];
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Scholarship Crawl Error:", error);
+    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429')) {
+      console.warn("Quota Gemini dépassé pour l'exploration des bourses.");
+    }
     return [];
   }
 }
+
+export async function analyzeGovernmentContent(content: string, url: string, source: string): Promise<Omit<GovernmentOpportunity, 'id' | 'createdAt' | 'updatedAt'>[]> {
+  const prompt = [
+    {
+      role: "user",
+      parts: [{
+        text: `Tu es un expert en bourses et aides financières du Burkina Faso. 
+Analyses le contenu textuel suivant extrait du site officiel ${source} (${url}) et extrais une liste d'opportunités (bourses, aides, prêts, concours).
+
+CONTENU :
+${content}
+
+EXTRAIS LES DONNÉES SUIVANTES pour chaque opportunité détectée :
+- titre (title)
+- type ('bourse', 'aide', 'prêt', 'concours', 'autre')
+- organisation (organization - p.ex. CIOSPB, FOSER, Ministère...)
+- description détaillée (description)
+- conditions d'éligibilité (eligibility)
+- pièces à fournir (requiredDocuments - tableau de chaînes)
+- date limite (deadline - format YYYY-MM-DD ou "Bientôt")
+- URL officielle (officialUrl - utilise ${url} si non spécifié plus précisément)
+- URL du PDF (pdfUrl - si un lien PDF semble lié à cette offre spécifique)
+- statut ('ouverte', 'bientôt expirée', 'expirée', 'résultats disponibles')
+- source (utilises exactement "${source}")
+- pays concernés (countryConcerns - tableau)
+- niveaux concernés (levelConcerns - p.ex. ["Licence", "Master"])
+
+IMPORTANT : Ne génère que des opportunités RÉELLES trouvées dans le texte. Ignore les menus ou textes génériques.
+Si le texte contient une liste de plusieurs offres, extrais-les toutes.
+
+RÉPONDS UNIQUEMENT EN JSON avec la structure :
+[
+  {
+    "title": "...",
+    "type": "...",
+    "organization": "...",
+    "description": "...",
+    "eligibility": "...",
+    "requiredDocuments": ["...", "..."],
+    "deadline": "YYYY-MM-DD",
+    "officialUrl": "...",
+    "pdfUrl": "...",
+    "status": "...",
+    "source": "${source}",
+    "levelConcerns": ["..."],
+    "countryConcerns": ["..."],
+    "isVerified": true
+  }
+]
+`
+      }]
+    }
+  ];
+
+  try {
+    const response = await getAiClient().models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    if (response.text) {
+      return parseResponse<any[]>(response.text);
+    }
+    return [];
+  } catch (error: any) {
+    console.error("Gemini Government Analysis Error:", error);
+    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429')) {
+      console.warn("Quota Gemini dépassé pour l'analyse gouvernementale.");
+    }
+    return [];
+  }
+}
+

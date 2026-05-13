@@ -150,6 +150,30 @@
         "lastUpdated": { "type": "string", "format": "date-time" }
       },
       "required": ["fieldName", "demandLevel", "lastUpdated"]
+    },
+    "GovernmentOpportunity": {
+      "title": "Government Opportunity",
+      "description": "Scholarships, aids and loans from government sources",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["bourse", "aide", "prêt", "concours", "autre"] },
+        "organization": { "type": "string" },
+        "description": { "type": "string" },
+        "eligibility": { "type": "string" },
+        "requiredDocuments": { "type": "array", "items": { "type": "string" } },
+        "deadline": { "type": "string" },
+        "officialUrl": { "type": "string" },
+        "pdfUrl": { "type": "string" },
+        "thumbnail": { "type": "string" },
+        "status": { "type": "string", "enum": ["ouverte", "bientôt expirée", "expirée", "résultats disponibles"] },
+        "source": { "type": "string", "enum": ["CIOSPB", "FOSER", "Gouvernement"] },
+        "isVerified": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "type", "organization", "deadline", "officialUrl", "status", "source", "createdAt"]
     }
   },
   "firestore": {
@@ -184,6 +208,10 @@
     "/saved_projects/{projectId}": {
       "schema": { "$ref": "#/entities/SavedProject" },
       "description": "Stores saved orientation simulations"
+    },
+    "/government_opportunities/{opportunityId}": {
+      "schema": { "$ref": "#/entities/GovernmentOpportunity" },
+      "description": "Stores opportunities from CIOSPB and FOSER"
     }
   }
 }

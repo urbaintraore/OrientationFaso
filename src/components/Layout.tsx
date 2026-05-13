@@ -58,7 +58,7 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
           </button>
           <button onClick={onScholarships} className="hover:text-indigo-600 transition-colors flex items-center gap-1">
             <span className="bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase font-black">Plus</span>
-            Bourses
+            Bourses & Aides
           </button>
           <button onClick={onMarketplace} className="hover:text-indigo-600 transition-colors">
             Écoles & Universités
@@ -209,7 +209,7 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
                 className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 text-slate-700 font-bold text-sm transition-colors"
               >
                 <GraduationCap className="w-4 h-4 text-indigo-500" />
-                Bourses d'Études
+                Bourses & Aides
               </button>
               <button 
                 onClick={() => { onPricing?.(); setIsMobileMenuOpen(false); }}

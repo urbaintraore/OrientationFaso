@@ -56,37 +56,25 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
     }
     
     setIsSyncing(true);
-    setSyncStatus("Moteur d'Intelligence Académique activé...");
-    
-    // We can iterate over typical search terms for Burkina Faso schools
-    const searchTerms = [
-      "Université Joseph Ki-Zerbo filières",
-      "Université Nazi Boni filières",
-      "Université Thomas Sankara programmes",
-      "Université Norbert Zongo offres de formation",
-      "Université Aube Nouvelle Ouagadougou",
-      "IAM Ouaga filières",
-      "ISIG International Ouagadougou",
-      "ESTA Burkina Faso",
-      "BIT Burkina Institute of Technology"
-    ];
+    const targetRegion = selectedCountry !== 'All' ? selectedCountry : 'Burkina Faso';
+    setSyncStatus(`Moteur d'Intelligence Académique activé pour : ${targetRegion}...`);
     
     let totalAdded = 0;
     
     try {
-      // In a real implementation we would loop and search, but here we invoke a "smart collect"
-      setSyncStatus("Analyse des sites officiels (ujkz.bf, ts.bf...)...");
+      setSyncStatus(`Analyse des établissements en cours pour : ${targetRegion}...`);
       
-      const regionData = await crawlInstitutions('Burkina Faso'); // Existing gemini call for backup
+      const regionData = await crawlInstitutions(targetRegion);
       
       if (regionData && regionData.length > 0) {
+        setSyncStatus(`Importation de ${regionData.length} établissements...`);
         for (const data of regionData) {
           try {
             await academicGatheringService.saveCrawledData({
               institution: {
                 ...data,
                 programsCount: data.programs?.length || 0,
-                degrees: Array.from(new Set(data.programs?.map((p: any) => p.level) || []))
+                degrees: Array.from(new Set(data.programs?.map((p: any) => p.level || p.degreeLevel) || []))
               },
               programs: data.programs || []
             });
@@ -456,7 +444,7 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
                                 <span className="text-[10px] font-black text-slate-400 uppercase mb-1">Programmes</span>
                                 <div className="flex items-center gap-2">
                                   <GraduationCap className="w-4 h-4 text-emerald-500" />
-                                  <span className="text-sm font-black text-slate-900">{inst.programsCount || (inst.programs?.length || 0)} Filières</span>
+                                  <span className="text-sm font-black text-slate-900">{Math.max(inst.programsCount || 0, inst.programs?.length || 0)} Filières</span>
                                 </div>
                               </div>
                             </div>
