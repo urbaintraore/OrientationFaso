@@ -1,0 +1,6 @@
+{
+  "name": "Remix: OrientationBF",
+  "description": "Plateforme intelligente d’orientation scolaire au Burkina Faso pour élèves, parents et établissements. Recommande les meilleures filières après le BEPC ou le BAC.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

@@ -1,0 +1,195 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- PRIMITIVES & HELPERS ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      // For this app, we define admin by email. 
+      // Hardcoded for robustness as per user's current project state.
+      return isSignedIn() && (
+        request.auth.token.email == 'admin@orientationbf.com' || 
+        request.auth.token.email == 'urbain.traoreurb@gmail.com' ||
+        request.auth.token.email == 'urbain.traore@gmail.com'
+      );
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- VALIDATION BLUEPRINTS ---
+
+    function isValidUserProfile(data) {
+      return data.uid is string && data.uid.size() <= 128
+        && data.email is string && data.email.size() <= 256
+        && data.profileType in ['student', 'parent', 'teacher', 'etablissement', 'system_admin']
+        && data.createdAt is string
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 256))
+        && (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 1024));
+    }
+
+    function isValidScholarship(data) {
+      return data.title is string && data.title.size() <= 256
+        && data.country is string && data.country.size() <= 128
+        && data.organization is string && data.organization.size() <= 256
+        && data.degreeLevel is string
+        && data.deadline is string
+        && data.applicationUrl is string && data.applicationUrl.size() <= 2048
+        && data.officialSource is string && data.officialSource.size() <= 2048
+        && data.createdAt is string;
+    }
+
+    function isValidInstitution(data) {
+      return data.name is string && data.name.size() <= 256
+        && data.type is string
+        && data.description is string && data.description.size() <= 5000
+        && data.city is string
+        && data.country is string
+        && data.website is string
+        && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() <= 128));
+    }
+
+    function isValidUFR(data) {
+      return data.institutionId is string && data.institutionId.size() <= 128
+        && data.name is string && data.name.size() <= 256
+        && data.createdAt is string;
+    }
+
+    function isValidProgram(data) {
+      return data.institutionId is string && data.institutionId.size() <= 128
+        && data.name is string && data.name.size() <= 256
+        && data.createdAt is string;
+    }
+
+    function isValidPost(data) {
+      return data.establishmentId is string && data.establishmentId.size() <= 128
+        && data.title is string && data.title.size() <= 256
+        && data.content is string && data.content.size() <= 10000
+        && data.createdAt is string;
+    }
+
+    function isValidSavedProject(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && data.type in ['bepc', 'bac']
+        && data.name is string && data.name.size() <= 256
+        && data.date is string
+        && data.profile is map
+        && data.result is map;
+    }
+
+    // --- COLLECTION RULES ---
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == userId
+        && incoming().profileType != 'system_admin'; // Prevent self-promoting to admin
+        
+      allow update: if (isOwner(userId) || isAdmin())
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && (isAdmin() || (incoming().profileType == existing().profileType && incoming().createdAt == existing().createdAt));
+        
+      allow delete: if isAdmin();
+    }
+
+    match /scholarships/{scholarshipId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin() && isValidScholarship(incoming());
+    }
+
+    match /institutions/{institutionId} {
+      allow read: if true;
+      allow create: if (isAdmin() || (isSignedIn() && incoming().ownerId == request.auth.uid))
+        && isValidInstitution(incoming());
+      allow update: if (isAdmin() || (isSignedIn() && existing().ownerId == request.auth.uid))
+        && isValidInstitution(incoming())
+        && (isAdmin() || incoming().ownerId == existing().ownerId);
+      allow delete: if isAdmin() || (isSignedIn() && existing().ownerId == request.auth.uid);
+    }
+
+    match /ufrs/{ufrId} {
+      allow read: if true;
+      allow create: if (isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/institutions/$(incoming().institutionId)).data.ownerId == request.auth.uid))
+        && isValidUFR(incoming());
+      allow update: if (isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/institutions/$(existing().institutionId)).data.ownerId == request.auth.uid))
+        && isValidUFR(incoming());
+      allow delete: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/institutions/$(existing().institutionId)).data.ownerId == request.auth.uid);
+    }
+
+    match /programs/{programId} {
+      allow read: if true;
+      allow create: if (isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/institutions/$(incoming().institutionId)).data.ownerId == request.auth.uid))
+        && isValidProgram(incoming());
+      allow update: if (isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/institutions/$(existing().institutionId)).data.ownerId == request.auth.uid))
+        && isValidProgram(incoming());
+      allow delete: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/institutions/$(existing().institutionId)).data.ownerId == request.auth.uid);
+    }
+
+    match /establishment_posts/{postId} {
+      allow read: if true;
+      allow create: if (isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/institutions/$(incoming().establishmentId)).data.ownerId == request.auth.uid))
+        && isValidPost(incoming());
+      allow update: if (isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/institutions/$(existing().establishmentId)).data.ownerId == request.auth.uid))
+        && isValidPost(incoming());
+      allow delete: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/institutions/$(existing().establishmentId)).data.ownerId == request.auth.uid);
+    }
+
+    match /saved_projects/{projectId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      
+      allow create: if isSignedIn() 
+        && incoming().userId == request.auth.uid
+        && isValidSavedProject(incoming());
+        
+      allow update: if isSignedIn() 
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && isValidSavedProject(incoming());
+        
+      allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    match /employment_trends/{trendId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Notifications often need specialized access
+    match /notifications/{notifId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      // Allow anyone to read
+      allow read: if true;
+      
+      // Only authenticated users can upload in production
+      // allow write: if request.auth != null && request.resource.size < 5 * 1024 * 1024;
+      
+      // For demo/prototype: allow public writes
+      allow write: if request.resource.size < 5 * 1024 * 1024;
+    }
+  }
+}

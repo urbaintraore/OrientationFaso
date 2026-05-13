@@ -1,0 +1,189 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Information about a registered user",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "profileType": { "type": "string", "enum": ["student", "parent", "teacher", "etablissement", "system_admin"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "fcmToken": { "type": "string" }
+      },
+      "required": ["uid", "email", "profileType", "createdAt"]
+    },
+    "SavedProject": {
+      "title": "Saved Project",
+      "description": "A saved orientation simulation result",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["bepc", "bac"] },
+        "name": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "profile": { "type": "object" },
+        "result": { "type": "object" }
+      },
+      "required": ["id", "userId", "type", "name", "date", "profile", "result"]
+    },
+    "Scholarship": {
+      "title": "Scholarship",
+      "description": "Details about a scholarship opportunity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "country": { "type": "string" },
+        "organization": { "type": "string" },
+        "university": { "type": "string" },
+        "degreeLevel": { "type": "string" },
+        "field": { "type": "array", "items": { "type": "string" } },
+        "deadline": { "type": "string" },
+        "fundingType": { "type": "string" },
+        "coverage": { "type": "array", "items": { "type": "string" } },
+        "eligibility": { "type": "string" },
+        "applicationUrl": { "type": "string" },
+        "officialSource": { "type": "string" },
+        "summaryAI": { "type": "string" },
+        "difficultyScore": { "type": "string", "enum": ["Très accessible", "Compétitif", "Élite"] },
+        "isForAfricans": { "type": "boolean" },
+        "isForBurkina": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isExpired": { "type": "boolean" }
+      },
+      "required": ["title", "country", "organization", "degreeLevel", "deadline", "applicationUrl", "officialSource", "createdAt"]
+    },
+    "Institution": {
+      "title": "Institution",
+      "description": "Details about a school or university",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "city": { "type": "string" },
+        "country": { "type": "string" },
+        "address": { "type": "string" },
+        "website": { "type": "string" },
+        "establishedYear": { "type": "number" },
+        "studentCount": { "type": "number" },
+        "overallRating": { "type": "number" },
+        "employabilityRate": { "type": "number" },
+        "reputationScore": { "type": "number" },
+        "tier": { "type": "string" },
+        "isVerified": { "type": "boolean" },
+        "contactEmail": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "socialLinks": { "type": "object" },
+        "location": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "description", "city", "country", "website"]
+    },
+    "UFR": {
+      "title": "UFR",
+      "description": "Unité de Formation et de Recherche / Faculté / Institut",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "institutionId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "headOfDepartment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["institutionId", "name", "createdAt"]
+    },
+    "Program": {
+      "title": "Program",
+      "description": "Academic program or major",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "institutionId": { "type": "string" },
+        "ufrId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "duration": { "type": "string" },
+        "degreeLevel": { "type": "string" },
+        "tuitionFee": { "type": "number" },
+        "employmentTrend": { "type": "string" },
+        "employmentScore": { "type": "number" },
+        "averageSalary": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["institutionId", "name", "createdAt"]
+    },
+    "Post": {
+      "title": "Establishment Post",
+      "description": "Publication from an educational institution",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "establishmentId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "mediaType": { "type": "string" },
+        "likesCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["establishmentId", "title", "content", "createdAt"]
+    },
+    "EmploymentTrend": {
+      "title": "Employment Trend",
+      "description": "Information about job market trends in Burkina Faso",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fieldName": { "type": "string" },
+        "demandLevel": { "type": "string", "enum": ["Très Forte Demande", "Forte Demande", "Stable", "Saturé"] },
+        "averageSalary": { "type": "string" },
+        "topCareers": { "type": "array", "items": { "type": "string" } },
+        "growthScore": { "type": "number" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fieldName", "demandLevel", "lastUpdated"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Stores user profiles"
+    },
+    "/scholarships/{scholarshipId}": {
+      "schema": { "$ref": "#/entities/Scholarship" },
+      "description": "Stores scholarship opportunities"
+    },
+    "/institutions/{institutionId}": {
+      "schema": { "$ref": "#/entities/Institution" },
+      "description": "Stores educational institutions data"
+    },
+    "/ufrs/{ufrId}": {
+      "schema": { "$ref": "#/entities/UFR" },
+      "description": "Stores UFR, faculties and institutes"
+    },
+    "/programs/{programId}": {
+      "schema": { "$ref": "#/entities/Program" },
+      "description": "Stores academic programs"
+    },
+    "/employment_trends/{trendId}": {
+      "schema": { "$ref": "#/entities/EmploymentTrend" },
+      "description": "Stores job market trends data"
+    },
+    "/establishment_posts/{postId}": {
+      "schema": { "$ref": "#/entities/Post" },
+      "description": "Stores publications from institutions"
+    },
+    "/saved_projects/{projectId}": {
+      "schema": { "$ref": "#/entities/SavedProject" },
+      "description": "Stores saved orientation simulations"
+    }
+  }
+}
