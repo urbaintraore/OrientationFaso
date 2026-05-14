@@ -16,6 +16,18 @@ function getAiClient(): GoogleGenAI {
   return aiClient;
 }
 
+/**
+ * Normalizes a string for comparison (lowercase, no accents, no special chars).
+ */
+function normalizeString(str: string): string {
+  return str
+    .normalize('NFD') // Separate accents from characters
+    .replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '') // Keep only alphanum
+    .trim();
+}
+
 export const academicGatheringService = {
   /**
    * Analyzes a text content (from a website) and extracts Institution and Programs data.
@@ -93,13 +105,13 @@ export const academicGatheringService = {
       if (!data.institution.name) throw new Error("Nom de l'établissement manquant.");
 
       // 1. Check if institution exists with a more robust check (normalized name + city)
-      const normalizedName = data.institution.name.trim().toLowerCase();
+      const normalizedName = normalizeString(data.institution.name);
       const institutionsQuery = query(collection(db, 'institutions'));
       const institutionsSnap = await getDocs(institutionsQuery);
       
       let existingInstDoc = institutionsSnap.docs.find(doc => {
         const d = doc.data();
-        return (d.name?.trim().toLowerCase() === normalizedName) || 
+        return (normalizeString(d.name || '') === normalizedName) || 
                (d.website && data.institution.website && d.website.includes(new URL(data.institution.website).hostname));
       });
       
@@ -138,11 +150,11 @@ export const academicGatheringService = {
       // 2. Add programs with duplicate check per institution
       const existingProgramsQuery = query(collection(db, 'programs'), where('institutionId', '==', institutionId));
       const existingProgramsSnap = await getDocs(existingProgramsQuery);
-      const existingProgramNames = new Set(existingProgramsSnap.docs.map(d => d.data().name?.trim().toLowerCase()));
+      const existingProgramNames = new Set(existingProgramsSnap.docs.map(d => normalizeString(d.data().name || '')));
 
       for (const prog of data.programs) {
         if (!prog.name) continue;
-        const normalizedProgName = prog.name.trim().toLowerCase();
+        const normalizedProgName = normalizeString(prog.name);
         
         if (!existingProgramNames.has(normalizedProgName)) {
           await programService.addProgram({
@@ -227,15 +239,40 @@ export const academicGatheringService = {
     
     const records = snap.docs.map(doc => ({ id: doc.id, data: doc.data() as Institution }));
     const uniqueMap = new Map<string, { id: string; data: Institution }>();
-    const toDelete: string[] = [];
     let mergedCount = 0;
 
     for (const record of records) {
-      // Create a unique key based on normalized name and city
-      const key = `${record.data.name?.trim().toLowerCase()}_${record.data.city?.trim().toLowerCase()}`;
+      // Create unique keys for detection
+      const nameKey = `${normalizeString(record.data.name || '')}_${normalizeString(record.data.city || '')}`;
+      let websiteKey = '';
+      if (record.data.website) {
+        try {
+          websiteKey = new URL(record.data.website).hostname.replace('www.', '');
+        } catch (e) {
+          websiteKey = record.data.website.toLowerCase();
+        }
+      }
       
-      if (uniqueMap.has(key)) {
-        const primary = uniqueMap.get(key)!;
+      let duplicateOf: string | null = null;
+      
+      // Look for existing match in uniqueMap
+      for (const [existingKey, existingRecord] of uniqueMap.entries()) {
+        const existingNameKey = `${normalizeString(existingRecord.data.name || '')}_${normalizeString(existingRecord.data.city || '')}`;
+        let existingWebsiteKey = '';
+        if (existingRecord.data.website) {
+          try {
+            existingWebsiteKey = new URL(existingRecord.data.website).hostname.replace('www.', '');
+          } catch (e) {}
+        }
+
+        if (nameKey === existingNameKey || (websiteKey && websiteKey === existingWebsiteKey)) {
+          duplicateOf = existingKey;
+          break;
+        }
+      }
+      
+      if (duplicateOf) {
+        const primary = uniqueMap.get(duplicateOf)!;
         // Merge programs from the duplicate to the primary
         const dupeProgramsQuery = query(collection(db, 'programs'), where('institutionId', '==', record.id));
         const dupeProgramsSnap = await getDocs(dupeProgramsQuery);
@@ -258,10 +295,9 @@ export const academicGatheringService = {
         
         // Delete the duplicate institution
         await institutionService.deleteInstitution(record.id);
-        toDelete.push(record.id);
         mergedCount++;
       } else {
-        uniqueMap.set(key, record);
+        uniqueMap.set(nameKey, record);
       }
     }
 
@@ -273,5 +309,42 @@ export const academicGatheringService = {
     }
 
     return { removed: mergedCount };
+  },
+
+  /**
+   * Counts potential duplicates without removing them.
+   */
+  async countPotentialDuplicates() {
+    const q = query(collection(db, 'institutions'));
+    const snap = await getDocs(q);
+    
+    const records = snap.docs.map(doc => doc.data() as Institution);
+    const uniqueMap = new Map<string, string>();
+    let duplicateCount = 0;
+
+    for (const record of records) {
+      const nameKey = `${normalizeString(record.name || '')}_${normalizeString(record.city || '')}`;
+      let websiteKey = '';
+      if (record.website) {
+        try {
+          websiteKey = new URL(record.website).hostname.replace('www.', '');
+        } catch (e) {}
+      }
+
+      let exists = false;
+      for (const [existingKey, existingWebsite] of uniqueMap.entries()) {
+        if (existingKey === nameKey || (websiteKey && websiteKey === existingWebsite)) {
+          exists = true;
+          break;
+        }
+      }
+
+      if (exists) {
+        duplicateCount++;
+      } else {
+        uniqueMap.set(nameKey, websiteKey);
+      }
+    }
+    return duplicateCount;
   }
 };

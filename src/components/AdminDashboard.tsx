@@ -389,11 +389,22 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [institutions, setInstitutions] = useState<any[]>([]);
   const [loadingInstitutions, setLoadingInstitutions] = useState(false);
+  const [duplicateCount, setDuplicateCount] = useState(0);
 
   useEffect(() => {
     fetchRealUsers();
     fetchRealInstitutions();
+    checkDuplicates();
   }, []);
+
+  const checkDuplicates = async () => {
+    try {
+      const count = await academicGatheringService.countPotentialDuplicates();
+      setDuplicateCount(count);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const fetchRealInstitutions = async () => {
     setLoadingInstitutions(true);
@@ -506,6 +517,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
       const res = await academicGatheringService.cleanDuplicates();
       alert(`Nettoyage terminé : ${res.removed} doublons supprimés.`);
       fetchRealInstitutions();
+      checkDuplicates();
     } catch (e) {
       alert("Erreur lors du nettoyage.");
     } finally {
@@ -1245,12 +1257,29 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
               Établissements
             </button>
             {activeTab === 'institutions' && (
-              <button
-                onClick={handleCleanDuplicates}
-                className="px-3 py-1 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase hover:bg-red-100 transition-colors border border-red-100"
-              >
-                Nettoyer Doublons
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCleanDuplicates}
+                  className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase transition-all border flex items-center gap-2 ${
+                    duplicateCount > 0 
+                      ? 'bg-red-600 text-white border-red-700 hover:bg-red-700 animate-pulse' 
+                      : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                  }`}
+                  disabled={loadingInstitutions}
+                >
+                  <Trash2 className="w-3 h-3" />
+                  {duplicateCount > 0 ? `Dédoublonner (${duplicateCount})` : 'Dédoublage Manuel'}
+                </button>
+                {duplicateCount === 0 && !loadingInstitutions && (
+                  <button 
+                    onClick={checkDuplicates}
+                    className="p-1 hover:bg-slate-100 rounded-lg text-slate-400"
+                    title="Re-scanner les doublons"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             )}
             <button
               onClick={() => setActiveTab('intelligence')}
