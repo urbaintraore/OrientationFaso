@@ -5,6 +5,8 @@ import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { FileUploader } from './FileUploader';
+import { INSTITUTION_TYPES } from '../constants';
+import { InstitutionType } from '../types';
 
 interface AuthProps {
   onLogin: (email?: string, password?: string) => void;
@@ -12,7 +14,6 @@ interface AuthProps {
 
 type UserProfileType = 'student' | 'etablissement' | 'parent';
 type EleveLevel = '3eme' | 'terminale' | 'autre';
-type InstitutionType = 'Université' | 'École' | 'Institut' | 'Lycée';
 
 export function Auth({ onLogin }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
@@ -30,7 +31,7 @@ export function Auth({ onLogin }: AuthProps) {
   
   // Champs Établissement
   const [instName, setInstName] = useState('');
-  const [instType, setInstType] = useState<InstitutionType>('Université');
+  const [instType, setInstType] = useState<InstitutionType>('Université Publique');
   const [instDescription, setInstDescription] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
 
@@ -356,10 +357,9 @@ export function Auth({ onLogin }: AuthProps) {
                       onChange={(e) => setInstType(e.target.value as any)}
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all bg-white"
                     >
-                      <option value="Université">Université</option>
-                      <option value="École">École</option>
-                      <option value="Institut">Institut</option>
-                      <option value="Lycée">Lycée</option>
+                      {INSTITUTION_TYPES.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
                     </select>
                   </div>
                   <div>

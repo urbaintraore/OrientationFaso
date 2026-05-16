@@ -1,9 +1,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { StudentProfile, AnalysisResult, PostBacProfile, UniversityAnalysisResult, Scholarship } from "../types";
+import { StudentProfile, AnalysisResult, PostBacProfile, UniversityAnalysisResult, Scholarship, GovernmentOpportunity } from "../types";
 
 let aiClient: GoogleGenAI | null = null;
 
-function getAiClient(): GoogleGenAI {
+export function getAiClient(): GoogleGenAI {
   if (!aiClient) {
     // In this environment, process.env.GEMINI_API_KEY is injected by the platform
     const apiKey = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '';
@@ -211,10 +211,19 @@ export async function analyzeProfile(profile: StudentProfile): Promise<AnalysisR
   }
 }
 
-export async function analyzePostBacProfile(profile: PostBacProfile): Promise<UniversityAnalysisResult> {
+export async function analyzePostBacProfile(profile: PostBacProfile, dbCareersContext?: string): Promise<UniversityAnalysisResult> {
+  const contextBlock = dbCareersContext ? `
+    VOICI LA LISTE DES CONCOURS ET RECRUTEMENTS ACTUELS DANS NOTRE BASE DE DONNÉES :
+    ${dbCareersContext}
+    
+    IMPORTANT : Choisis parmi ces opportunités celles qui correspondent le mieux au profil de l'élève.
+  ` : '';
+
   const prompt = `
     Tu es une plateforme d’orientation universitaire intelligente au Burkina Faso.
     Ta mission est d’analyser le profil post-BAC d'un élève pour lui recommander les meilleures filières universitaires.
+
+    ${contextBlock}
 
     Profil de l'élève :
     Nom: ${profile.name}
@@ -256,6 +265,7 @@ export async function analyzePostBacProfile(profile: PostBacProfile): Promise<Un
     7. Citer au moins 5 universités publiques au Burkina et 5 privées.
     8. Citer au moins 10 universités en Afrique, 10 en Europe, 10 aux USA, 10 en Asie, 10 au Canada.
     9. Citer au moins 10 débouchés possibles.
+    10. NEW: Identifier des concours de la fonction publique, recrutements de sociétés d'État et autres opportunités de carrières alignées avec les filières.
 
     Format de réponse JSON attendu :
     {
@@ -277,18 +287,34 @@ export async function analyzePostBacProfile(profile: PostBacProfile): Promise<Un
           "careerRoadmap": ["Étape 1", "Étape 2", "Étape 3"]
         }
       ], // Au moins 5 débouchés détaillés
+      "careerOpportunities": [
+        {
+          "title": "Nom du Concours ou Titre du poste",
+          "type": "concours" | "recrutement_societe_etat" | "autre",
+          "organization": "Organisme (ex: SONABEL, Fonction Publique, ONEA)",
+          "requiredDegree": "Niveau requis (ex: Licence, Master)",
+          "compatibleFields": ["Filière 1"],
+          "positionsCount": 10,
+          "conditions": "Conditions clés",
+          "ageLimit": "Limite d'âge",
+          "documentsRequired": ["Doc 1"],
+          "deadline": "Date ou Période habituelle",
+          "officialUrl": "Lien officiel ou d'information",
+          "status": "ouvert" | "bientôt ouvert" | "expiré"
+        }
+      ],
       "employabilityRating": "Élevée/Moyenne/Faible",
       "strategicAdvice": ["Conseil 1", "Conseil 2"],
       "testimonials": [...],
       "usefulLinks": [...],
       "universities": {
-        "burkinaPublic": ["Université 1", "Université 2", ...], // Au moins 5
-        "burkinaPrivate": ["Université 1", "Université 2", ...], // Au moins 5
-        "africa": ["Université 1", ...], // Au moins 10
-        "europe": ["Université 1", ...], // Au moins 10
-        "usa": ["Université 1", ...], // Au moins 10
-        "asia": ["Université 1", ...], // Au moins 10
-        "canada": ["Université 1", ...] // Au moins 10
+        "burkinaPublic": ["Université 1", "Université 2"],
+        "burkinaPrivate": ["Université 1", "Université 2"],
+        "africa": ["Université 1"],
+        "europe": ["Université 1"],
+        "usa": ["Université 1"],
+        "asia": ["Université 1"],
+        "canada": ["Université 1"]
       }
     }
   `;
@@ -521,10 +547,10 @@ export async function crawlInstitutions(region: string): Promise<any[]> {
     return [];
   } catch (error: any) {
     console.error("Gemini Crawl Error:", error);
-    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429')) {
-      console.warn("Quota Gemini dépassé pour l'exploration des institutions.");
+    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429') || error.status === 429) {
+      throw new Error("Quota Gemini dépassé (RESOURCE_EXHAUSTED). Veuillez réessayer plus tard.");
     }
-    return [];
+    throw error;
   }
 }
 
@@ -584,10 +610,10 @@ export async function crawlScholarshipMarket(academicYears: string[] = ['2025/20
     return [];
   } catch (error: any) {
     console.error("Gemini Scholarship Crawl Error:", error);
-    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429')) {
-      console.warn("Quota Gemini dépassé pour l'exploration des bourses.");
+    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429') || error.status === 429) {
+      throw new Error("Quota Gemini dépassé (RESOURCE_EXHAUSTED) pour l'exploration des bourses. Veuillez réessayer demain.");
     }
-    return [];
+    throw error;
   }
 }
 
@@ -659,10 +685,10 @@ RÉPONDS UNIQUEMENT EN JSON avec la structure :
     return [];
   } catch (error: any) {
     console.error("Gemini Government Analysis Error:", error);
-    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429')) {
-      console.warn("Quota Gemini dépassé pour l'analyse gouvernementale.");
+    if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429') || error.status === 429) {
+      throw new Error("Quota Gemini dépassé (RESOURCE_EXHAUSTED) pour l'analyse gouvernementale. Veuillez réessayer demain.");
     }
-    return [];
+    throw error;
   }
 }
 

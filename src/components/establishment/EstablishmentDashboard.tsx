@@ -25,14 +25,17 @@ import {
   Trash
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { doc, getDoc } from 'firebase/firestore';
 import { Institution, InstitutionType, UFR, Program, EstablishmentPost, PostCategory } from '../../types';
+import { INSTITUTION_TYPES } from '../../constants';
 import { institutionService } from '../../services/institutionService';
 import { ufrService } from '../../services/ufrService';
 import { programService } from '../../services/programService';
 import { postService } from '../../services/postService';
-import { auth } from '../../lib/firebase';
+import { auth, db } from '../../lib/firebase';
 
 import { MarketTrendsDashboard } from './MarketTrendsDashboard';
+import { SchoolStudentsPanel } from './SchoolStudentsPanel';
 import { FileUploader } from '../FileUploader';
 
 interface EstablishmentDashboardProps {
@@ -40,7 +43,7 @@ interface EstablishmentDashboardProps {
 }
 
 export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'ufrs' | 'programs' | 'posts' | 'trends' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'ufrs' | 'programs' | 'posts' | 'trends' | 'settings' | 'students'>('overview');
   const [institution, setInstitution] = useState<Institution | null>(null);
   const [ufrs, setUfrs] = useState<UFR[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -66,6 +69,19 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
           setUfrs(ufrData);
           setPrograms(programData);
           setPosts(postData);
+        } else {
+          // Fetch user profile to pre-fill setupData
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setSetupData(prev => ({
+              ...prev,
+              name: userData.institutionName || prev.name,
+              type: (userData.institutionType as InstitutionType) || prev.type,
+              description: userData.description || prev.description,
+              email: user.email || prev.email
+            }));
+          }
         }
       } catch (error) {
         console.error("Error fetching establishment data:", error);
@@ -80,7 +96,7 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
   const [isSettingUp, setIsSettingUp] = useState(false);
   const [setupData, setSetupData] = useState({
     name: '',
-    type: 'Université' as InstitutionType,
+    type: 'Université Publique' as InstitutionType,
     city: '',
     country: 'Burkina Faso',
     description: '',
@@ -186,10 +202,9 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
                     value={setupData.type}
                     onChange={e => setSetupData({...setupData, type: e.target.value as any})}
                   >
-                    <option value="Université">Université</option>
-                    <option value="Institut">Institut</option>
-                    <option value="Grande École">Grande École</option>
-                    <option value="Centre de Formation">Centre de Formation</option>
+                    {INSTITUTION_TYPES.map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -227,6 +242,24 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
     );
   }
 
+  const isSchool = institution ? (institution.type === 'Collège' || institution.type === 'Lycée' || institution.type === 'Lycée Technique' || institution.type === 'Lycée Scientifique' || institution.type === 'Collège et Lycée') : false;
+
+  const tabs = isSchool ? [
+    { id: 'overview', icon: LayoutDashboard, label: 'Aperçu' },
+    { id: 'students', icon: Users, label: 'Élèves Inscrits' },
+    { id: 'programs', icon: FileText, label: 'Séries & Formations' },
+    { id: 'posts', icon: FileText, label: 'Publications' },
+    { id: 'trends', icon: BarChart3, label: 'Analyses & Tendances' },
+    { id: 'settings', icon: Settings, label: 'Profil Établissement' },
+  ] : [
+    { id: 'overview', icon: LayoutDashboard, label: 'Aperçu' },
+    { id: 'ufrs', icon: GraduationCap, label: 'UFR & Facultés' },
+    { id: 'programs', icon: FileText, label: 'Filières' },
+    { id: 'posts', icon: Users, label: 'Actualités' },
+    { id: 'trends', icon: BarChart3, label: 'Marché & Emploi' },
+    { id: 'settings', icon: Settings, label: 'Configuration' },
+  ];
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       {/* Sidebar */}
@@ -236,20 +269,13 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
             <Building2 className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-black text-slate-900 uppercase tracking-widest text-xs">E-Portal</h1>
+            <h1 className="font-black text-slate-900 uppercase tracking-widest text-xs">E-Portail</h1>
             <p className="text-[10px] font-bold text-slate-400 capitalize">Tableau de Bord</p>
           </div>
         </div>
 
         <nav className="flex flex-col gap-1">
-          {[
-            { id: 'overview', icon: LayoutDashboard, label: 'Aperçu' },
-            { id: 'ufrs', icon: GraduationCap, label: 'UFR & Facultés' },
-            { id: 'programs', icon: FileText, label: 'Filières' },
-            { id: 'posts', icon: Users, label: 'Actualités' },
-            { id: 'trends', icon: BarChart3, label: 'Marché & Emploi' },
-            { id: 'settings', icon: Settings, label: 'Configuration' },
-          ].map((item) => (
+          {tabs.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
@@ -429,6 +455,10 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
 
           {activeTab === 'programs' && (
              <ProgramManagement institutionId={institution.id} ufrs={ufrs} />
+          )}
+
+          {activeTab === 'students' && (
+             <SchoolStudentsPanel institution={institution} />
           )}
 
           {activeTab === 'posts' && (

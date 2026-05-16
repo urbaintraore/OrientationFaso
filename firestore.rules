@@ -21,13 +21,18 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email_verified == true;
     }
 
+    function isTimestamp(val) {
+      return val is timestamp || (val is string && val.size() <= 128);
+    }
+
     function isAdmin() {
       // For this app, we define admin by email. 
       // Hardcoded for robustness as per user's current project state.
       return isSignedIn() && (
         request.auth.token.email == 'admin@orientationbf.com' || 
         request.auth.token.email == 'urbain.traoreurb@gmail.com' ||
-        request.auth.token.email == 'urbain.traore@gmail.com'
+        request.auth.token.email == 'urbain.traore@gmail.com' ||
+        request.auth.token.email == 'urbain.traore.dev@gmail.com'
       );
     }
 
@@ -51,7 +56,23 @@ service cloud.firestore {
         && data.profileType in ['student', 'parent', 'teacher', 'etablissement', 'system_admin']
         && data.createdAt is string
         && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 256))
-        && (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 1024));
+        && (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 1024))
+        && (!('photoUrl' in data) || data.photoUrl is string)
+        && (!('level' in data) || data.level is string)
+        && (!('school' in data) || data.school is string)
+        && (!('institutionName' in data) || data.institutionName is string)
+        && (!('institutionType' in data) || data.institutionType is string)
+        && (!('description' in data) || data.description is string)
+        && (!('childName' in data) || data.childName is string)
+        && (!('childLevel' in data) || data.childLevel is string)
+        && (!('hasPaid' in data) || data.hasPaid is bool)
+        && (!('loginEnabled' in data) || data.loginEnabled is bool)
+        && (!('date' in data) || data.date is string)
+        && (!('age' in data) || data.age is number)
+        && (!('trimesters' in data) || data.trimesters is list)
+        && (!('bepc' in data) || data.bepc is map)
+        && (!('bac' in data) || data.bac is map)
+        && (!('analysisResult' in data) || data.analysisResult is map);
     }
 
     function isValidScholarship(data) {
@@ -62,36 +83,37 @@ service cloud.firestore {
         && data.deadline is string
         && data.applicationUrl is string && data.applicationUrl.size() <= 2048
         && data.officialSource is string && data.officialSource.size() <= 2048
-        && data.createdAt is string;
+        && isTimestamp(data.createdAt);
     }
 
     function isValidInstitution(data) {
       return data.name is string && data.name.size() <= 256
         && data.type is string
-        && data.description is string && data.description.size() <= 5000
+        && data.description is string && data.description.size() <= 10000
         && data.city is string
         && data.country is string
         && data.website is string
-        && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() <= 128));
+        && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() <= 128))
+        && (!('createdAt' in data) || isTimestamp(data.createdAt));
     }
 
     function isValidUFR(data) {
       return data.institutionId is string && data.institutionId.size() <= 128
         && data.name is string && data.name.size() <= 256
-        && data.createdAt is string;
+        && isTimestamp(data.createdAt);
     }
 
     function isValidProgram(data) {
       return data.institutionId is string && data.institutionId.size() <= 128
-        && data.name is string && data.name.size() <= 256
-        && data.createdAt is string;
+        && data.name is string && data.name.size() <= 512
+        && isTimestamp(data.createdAt);
     }
 
     function isValidPost(data) {
       return data.establishmentId is string && data.establishmentId.size() <= 128
         && data.title is string && data.title.size() <= 256
         && data.content is string && data.content.size() <= 10000
-        && data.createdAt is string;
+        && isTimestamp(data.createdAt);
     }
 
     function isValidSavedProject(data) {
@@ -113,7 +135,7 @@ service cloud.firestore {
       allow create: if isOwner(userId)
         && isValidUserProfile(incoming())
         && incoming().uid == userId
-        && incoming().profileType != 'system_admin'; // Prevent self-promoting to admin
+        && (incoming().profileType != 'system_admin' || isAdmin()); // Prevent self-promoting to admin unless actually admin
         
       allow update: if (isOwner(userId) || isAdmin())
         && isValidUserProfile(incoming())
@@ -182,6 +204,11 @@ service cloud.firestore {
     }
 
     match /government_opportunities/{opportunityId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /career_competitions/{competitionId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }

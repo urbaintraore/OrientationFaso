@@ -180,7 +180,7 @@ export function InstitutionDetails({ institutionId, onBack }: InstitutionDetails
               onClick={() => setActiveTab('programs')}
               className={`px-4 py-3 font-black text-[10px] uppercase tracking-widest whitespace-nowrap border-b-2 transition-all ${activeTab === 'programs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
             >
-              Filières ({Math.max(programs.length, institution.programsCount || 0)})
+              {(institution.type === 'Collège' || institution.type === 'Lycée' || institution.type === 'Lycée Technique' || institution.type === 'Collège et Lycée') ? 'Séries & Formations' : 'Filières'} ({Math.max(programs.length, institution.programsCount || 0)})
             </button>
             {posts.length > 0 && (
               <button 

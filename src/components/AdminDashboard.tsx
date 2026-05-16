@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Users, CreditCard, CheckCircle, XCircle, Search, Trash2, Plus, X, Eye, GraduationCap, School, Calendar, Filter, Download, FileText, TrendingUp, AlertTriangle, ToggleLeft as ToggleLeftIcon, ToggleRight as ToggleRightIcon, Loader2, RefreshCw, Zap, Sparkles, Building2, Bell, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Users, CreditCard, CheckCircle, XCircle, Search, Trash2, Plus, X, Eye, GraduationCap, School, Calendar, Filter, Download, FileText, TrendingUp, AlertTriangle, ToggleLeft as ToggleLeftIcon, ToggleRight as ToggleRightIcon, Loader2, RefreshCw, Zap, Sparkles, Building2, Bell, ShieldCheck, AlertCircle, Globe, Briefcase } from 'lucide-react';
 import { AnalysisResult, UniversityAnalysisResult } from '../types';
 import { mockInstitutions } from '../data/mockInstitutions';
 import { jsPDF } from 'jspdf';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { CareerOpportunity } from '../types';
 import { academicGatheringService } from '../services/academicGatheringService';
+import { careerGatheringService } from '../services/careerGatheringService';
 import { governmentGatheringService } from '../services/governmentGatheringService';
 import { notificationService } from '../services/notificationService';
 import { crawlInstitutions } from '../services/gemini';
@@ -432,6 +434,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
           name: data.displayName || data.fullName || 'Utilisateur sans nom',
           email: data.email || 'Pas d\'email',
           hasPaid: data.hasPaid || false,
+          paymentStatus: data.paymentStatus || (data.hasPaid ? 'validated' : 'none'),
+          paymentMethod: data.paymentMethod || null,
+          paymentTransactionId: data.paymentTransactionId || null,
+          paymentDate: data.paymentDate?.seconds ? new Date(data.paymentDate.seconds * 1000).toISOString() : (data.paymentDate || null),
           date: data.createdAt ? data.createdAt.split('T')[0] : (data.date || new Date().toISOString().split('T')[0]),
           status: data.hasPaid ? 'Actif' : 'En attente',
           loginEnabled: data.loginEnabled !== undefined ? data.loginEnabled : true,
@@ -466,8 +472,12 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   };
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'users' | 'payments' | 'institutions' | 'notifications' | 'intelligence' | 'gov_sync'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'payments' | 'institutions' | 'notifications' | 'intelligence' | 'gov_sync' | 'careers'>('users');
   
+  // Custom Dialog/Toast states
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{message: string, onConfirm: () => void} | null>(null);
+
   // Intelligence state
   const [intelUrl, setIntelUrl] = useState('');
   const [intelStatus, setIntelStatus] = useState('');
@@ -478,6 +488,33 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [isGovSyncRunning, setIsGovSyncRunning] = useState(false);
   const [govSyncStatus, setGovSyncStatus] = useState('');
   const [govSyncResult, setGovSyncResult] = useState<{ added: number; updated: number; errors: string[] } | null>(null);
+
+  // Career Sync state
+  const [isCareerSyncRunning, setIsCareerSyncRunning] = useState(false);
+  const [careerSyncStatus, setCareerSyncStatus] = useState('');
+  const [careerSyncResult, setCareerSyncResult] = useState<{added: number} | null>(null);
+
+  // Career Management state
+  const [careersList, setCareersList] = useState<CareerOpportunity[]>([]);
+  const [loadingCareers, setLoadingCareers] = useState(false);
+
+  const fetchCareers = async () => {
+    setLoadingCareers(true);
+    try {
+      const data = await careerGatheringService.getOpportunities();
+      setCareersList(data);
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setLoadingCareers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'careers') {
+      fetchCareers();
+    }
+  }, [activeTab]);
 
   const handleGovSync = async () => {
     setIsGovSyncRunning(true);
@@ -510,19 +547,71 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
     }
   };
 
-  const handleCleanDuplicates = async () => {
-    if (!window.confirm("Voulez-vous fusionner les établissements en double ? Cette action est irréversible.")) return;
-    setLoadingInstitutions(true);
+  const handleCareerSync = async () => {
+    setIsCareerSyncRunning(true);
+    setCareerSyncStatus('Analyse en cours des sites de la fonction publique et sociétés d\'État...');
     try {
-      const res = await academicGatheringService.cleanDuplicates();
-      alert(`Nettoyage terminé : ${res.removed} doublons supprimés.`);
-      fetchRealInstitutions();
-      checkDuplicates();
-    } catch (e) {
-      alert("Erreur lors du nettoyage.");
+      const results = await careerGatheringService.crawlOpportunities();
+      setCareerSyncResult(results);
+      setCareerSyncStatus(`Synchronisation terminée. ${results.added} opportunités ajoutées.`);
+      if (results.added > 0) {
+        await notificationService.sendNotification({
+          title: "Nouveaux concours et recrutements d'État !",
+          message: `${results.added} nouvelles opportunités ont été publiées sur la plateforme.`,
+          category: 'system',
+          target: 'all',
+          link: 'dashboard'
+        });
+      }
+    } catch (error: any) {
+      console.error(error);
+      setCareerSyncStatus(`Erreur de synchronisation: ${error.message}`);
     } finally {
-      setLoadingInstitutions(false);
+      setIsCareerSyncRunning(false);
     }
+  };
+
+  const handleDeleteCareer = (id: string) => {
+    setConfirmDialog({
+      message: 'Êtes-vous sûr de vouloir supprimer ce concours ?',
+      onConfirm: async () => {
+        try {
+          await careerGatheringService.deleteOpportunity(id);
+          setCareersList(careersList.filter(c => c.id !== id));
+          setNotification({ message: 'Concours supprimé', type: 'success' });
+        } catch (e) {
+          setNotification({ message: 'Erreur lors de la suppression', type: 'error' });
+        } finally {
+          setConfirmDialog(null);
+        }
+      }
+    });
+  };
+
+  const handleCleanDuplicates = async () => {
+    setConfirmDialog({
+      message: "Voulez-vous fusionner les établissements en double ? Cette action est irréversible.",
+      onConfirm: async () => {
+        setLoadingInstitutions(true);
+        try {
+          const res = await academicGatheringService.cleanDuplicates();
+          setNotification({ 
+            message: `Nettoyage terminé : ${res.removed} doublons supprimés.`, 
+            type: 'success' 
+          });
+          fetchRealInstitutions();
+          checkDuplicates();
+        } catch (e) {
+          setNotification({ 
+            message: "Erreur lors du nettoyage.", 
+            type: 'error' 
+          });
+        } finally {
+          setLoadingInstitutions(false);
+          setConfirmDialog(null);
+        }
+      }
+    });
   };
 
   const handleRunIntel = async () => {
@@ -566,9 +655,13 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
           setIntelStatus('Aucune donnée structurée détectée sur ce site.');
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setIntelStatus('Erreur critique lors de l\'analyse.');
+      if (e.message && e.message.includes('Quota')) {
+        setIntelStatus("Erreur : Quota Gemini dépassé. Veuillez réessayer demain.");
+      } else {
+        setIntelStatus(`Erreur lors de l'analyse : ${e.message || 'Erreur critique.'}`);
+      }
     } finally {
       setIsIntelRunning(false);
     }
@@ -600,7 +693,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
         target: notificationForm.target,
         link: notificationForm.link
       });
-      alert('Notification diffusée avec succès !');
+      setNotification({ message: 'Notification diffusée avec succès !', type: 'success' });
       setNotificationForm({
         title: '',
         message: '',
@@ -609,7 +702,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
         link: 'scholarships'
       });
     } catch (e) {
-      alert('Erreur lors de l\'envoi.');
+      setNotification({ message: 'Erreur lors de l\'envoi.', type: 'error' });
     } finally {
       setIsSendingNotif(false);
     }
@@ -694,13 +787,13 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
 
   // Derived payments data
   const payments = users.map(user => ({
-    id: `PAY-${1000 + user.id}`,
+    id: user.paymentTransactionId || `PAY-${1000 + (typeof user.id === 'string' ? parseInt(user.id) || 0 : user.id)}`,
     userId: user.id,
     userName: user.name,
     amount: 2000,
-    date: user.date,
-    status: user.hasPaid ? 'Completed' : 'Pending',
-    method: user.hasPaid ? (user.id % 2 === 0 ? 'Orange Money' : 'Moov Money') : '-'
+    date: user.paymentDate ? user.paymentDate.split('T')[0] : user.date,
+    status: user.paymentStatus === 'validated' ? 'Completed' : (user.paymentStatus === 'pending' ? 'Pending' : 'No Payment'),
+    method: user.paymentMethod ? (user.paymentMethod === 'orange' ? 'Orange Money' : user.paymentMethod === 'moov' ? 'Moov Money' : 'Telecel Money') : (user.hasPaid ? 'Divers' : '-')
   }));
 
   const filteredPayments = payments.filter(payment => {
@@ -789,33 +882,76 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
     }
   };
 
-  const togglePaymentStatus = (id: number) => {
-    setUsers(users.map(user => {
-      if (user.id === id) {
-        const newStatus = !user.hasPaid;
-        return {
-          ...user,
-          hasPaid: newStatus,
-          status: newStatus ? 'Actif' : 'En attente'
-        };
-      }
-      return user;
-    }));
+  const handleValidatePayment = async (userId: string) => {
+    try {
+      const userRef = doc(db, 'users', userId.toString());
+      await updateDoc(userRef, {
+        hasPaid: true,
+        paymentStatus: 'validated',
+        status: 'Actif'
+      });
+      setUsers(users.map(u => u.id === userId ? { ...u, hasPaid: true, paymentStatus: 'validated', status: 'Actif' } : u));
+      setNotification({ message: 'Paiement validé avec succès !', type: 'success' });
+    } catch (e) {
+      console.error(e);
+      setNotification({ message: 'Erreur lors de la validation.', type: 'error' });
+    }
   };
 
-  const handleDeleteUser = (id: number) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
-      setUsers(users.filter(user => user.id !== id));
-      if (selectedUser?.id === id) setSelectedUser(null);
+  const handleRejectPayment = async (userId: string) => {
+    try {
+      const userRef = doc(db, 'users', userId.toString());
+      await updateDoc(userRef, {
+        paymentStatus: 'rejected',
+        hasPaid: false
+      });
+      setUsers(users.map(u => u.id === userId ? { ...u, paymentStatus: 'rejected', hasPaid: false } : u));
+      setNotification({ message: 'Paiement rejeté.', type: 'error' });
+    } catch (e) {
+      console.error(e);
+      setNotification({ message: 'Erreur lors du rejet.', type: 'error' });
     }
+  };
+
+  const togglePaymentStatus = async (id: any) => {
+    const user = users.find(u => u.id === id);
+    if (!user) return;
+
+    const newPaidStatus = !user.hasPaid;
+    try {
+      const userRef = doc(db, 'users', id.toString());
+      await updateDoc(userRef, {
+        hasPaid: newPaidStatus,
+        paymentStatus: newPaidStatus ? 'validated' : 'none',
+        status: newPaidStatus ? 'Actif' : 'En attente'
+      });
+      setUsers(users.map(u => u.id === id ? { ...u, hasPaid: newPaidStatus, paymentStatus: newPaidStatus ? 'validated' : 'none', status: newPaidStatus ? 'Actif' : 'En attente' } : u));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteUser = (id: number | string) => {
+    setConfirmDialog({
+      message: 'Êtes-vous sûr de vouloir supprimer cet utilisateur ?',
+      onConfirm: () => {
+        setUsers(users.filter(user => user.id !== id));
+        if (selectedUser?.id === id) setSelectedUser(null);
+        setConfirmDialog(null);
+      }
+    });
   };
 
   const handleBulkDelete = () => {
     if (selectedUserIds.length === 0) return;
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer ${selectedUserIds.length} utilisateur(s) ?`)) {
-      setUsers(users.filter(user => !selectedUserIds.includes(user.id)));
-      setSelectedUserIds([]);
-    }
+    setConfirmDialog({
+      message: `Êtes-vous sûr de vouloir supprimer ${selectedUserIds.length} utilisateur(s) ?`,
+      onConfirm: () => {
+        setUsers(users.filter(user => !selectedUserIds.includes(user.id as any)));
+        setSelectedUserIds([]);
+        setConfirmDialog(null);
+      }
+    });
   };
 
   const toggleUserSelection = (id: number) => {
@@ -1248,58 +1384,83 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
             </button>
             <button
               onClick={() => setActiveTab('institutions')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
                 activeTab === 'institutions' 
-                  ? 'bg-emerald-50 text-emerald-600' 
-                  : 'text-slate-600 hover:bg-slate-50'
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' 
+                  : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              Établissements
+              Établissements {duplicateCount > 0 && (
+                <span className="ml-1 bg-white text-emerald-600 px-1.5 py-0.5 rounded-full text-[10px]">
+                  {duplicateCount}
+                </span>
+              )}
             </button>
             {activeTab === 'institutions' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <button
                   onClick={handleCleanDuplicates}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase transition-all border flex items-center gap-2 ${
-                    duplicateCount > 0 
-                      ? 'bg-red-600 text-white border-red-700 hover:bg-red-700 animate-pulse' 
-                      : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-                  }`}
                   disabled={loadingInstitutions}
+                  className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-md ${
+                    duplicateCount > 0 
+                      ? 'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200 animate-pulse' 
+                      : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                  } disabled:opacity-50`}
                 >
-                  <Trash2 className="w-3 h-3" />
-                  {duplicateCount > 0 ? `Dédoublonner (${duplicateCount})` : 'Dédoublage Manuel'}
+                  {loadingInstitutions ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      {duplicateCount > 0 ? <Trash2 className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
+                    </>
+                  )}
+                  {duplicateCount > 0 ? `Dédoublonner (${duplicateCount})` : 'Nettoyer la base'}
                 </button>
-                {duplicateCount === 0 && !loadingInstitutions && (
-                  <button 
-                    onClick={checkDuplicates}
-                    className="p-1 hover:bg-slate-100 rounded-lg text-slate-400"
-                    title="Re-scanner les doublons"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                  </button>
-                )}
+                <button 
+                  onClick={async () => {
+                    setLoadingInstitutions(true);
+                    await checkDuplicates();
+                    setLoadingInstitutions(false);
+                    if (duplicateCount === 0) {
+                      setNotification({ message: "Aucun doublon détecté.", type: 'success' });
+                    }
+                  }}
+                  className="p-2 hover:bg-emerald-50 rounded-xl text-emerald-600 border border-emerald-100 transition-all"
+                  title="Scanner les doublons"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingInstitutions ? 'animate-spin' : ''}`} />
+                </button>
               </div>
             )}
             <button
               onClick={() => setActiveTab('intelligence')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
                 activeTab === 'intelligence' 
-                  ? 'bg-purple-50 text-purple-600' 
-                  : 'text-slate-600 hover:bg-slate-50'
+                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-200' 
+                  : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              Intelligence Académique
+              Intelligence IA
             </button>
             <button
               onClick={() => setActiveTab('gov_sync')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
                 activeTab === 'gov_sync' 
-                  ? 'bg-red-50 text-red-600' 
-                  : 'text-slate-600 hover:bg-slate-50'
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-200' 
+                  : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              Opportunités Gov (Sync)
+              Sync Gouv
+            </button>
+            <button
+              onClick={() => setActiveTab('careers')}
+              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
+                activeTab === 'careers' 
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' 
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Concours d'État
             </button>
           </div>
           
@@ -1472,17 +1633,35 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      placeholder="URL (https://...) ou Région (Burkina Faso, Sénégal...)"
-                      value={intelUrl}
-                      onChange={(e) => setIntelUrl(e.target.value)}
-                      className="w-full px-6 py-4 rounded-2xl border-2 border-slate-200 focus:border-purple-500 outline-none transition-all font-medium"
-                    />
+                <div className="flex flex-col gap-4">
+                  <div className="flex gap-4">
+                    <select
+                      value={intelUrl === 'France' || intelUrl === 'USA' || intelUrl === 'Canada' || intelUrl === 'Chine' || intelUrl === 'Japon' || intelUrl === 'Maroc' || intelUrl === 'Sénégal' || intelUrl === 'Côte d\'Ivoire' || intelUrl === 'Burkina Faso' ? intelUrl : 'custom'}
+                      onChange={(e) => setIntelUrl(e.target.value === 'custom' ? '' : e.target.value)}
+                      className="px-6 py-4 rounded-2xl border-2 border-slate-200 focus:border-purple-500 outline-none transition-all font-medium bg-white"
+                    >
+                      <option value="custom">🌐 Région personnalisée / URL</option>
+                      <option value="Burkina Faso">🇧🇫 Burkina Faso</option>
+                      <option value="France">🇫🇷 France</option>
+                      <option value="USA">🇺🇸 USA</option>
+                      <option value="Canada">🇨🇦 Canada</option>
+                      <option value="Maroc">🇲🇦 Maroc</option>
+                      <option value="Sénégal">🇸🇳 Sénégal</option>
+                      <option value="Côte d'Ivoire">🇨🇮 Côte d'Ivoire</option>
+                      <option value="Chine">🇨🇳 Chine</option>
+                      <option value="Japon">🇯🇵 Japon</option>
+                    </select>
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        placeholder="URL (https://...) ou Nom de région spécifique"
+                        value={intelUrl}
+                        onChange={(e) => setIntelUrl(e.target.value)}
+                        className="w-full px-6 py-4 rounded-2xl border-2 border-slate-200 focus:border-purple-500 outline-none transition-all font-medium"
+                      />
+                    </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={handleRunIntel}
                       disabled={isIntelRunning || !intelUrl}
@@ -1493,7 +1672,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       ) : (
                         <Sparkles className="w-4 h-4" />
                       )}
-                      Explorer le Monde
+                      Lancer l'exploration
                     </button>
                     <button
                       onClick={handleSyncBurkina}
@@ -1505,7 +1684,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                     </button>
                     <button
                       onClick={async () => {
-                        const randomCountries = ['France', 'USA', 'Canada', 'Chine', 'Japon', 'Allemagne', 'Sénégal', 'Côte d\'Ivoire'];
+                        const randomCountries = ['France', 'USA', 'Canada', 'Chine', 'Japon', 'Allemagne', 'Sénégal', 'Côte d\'Ivoire', 'Maroc'];
                         const country = randomCountries[Math.floor(Math.random() * randomCountries.length)];
                         setIntelUrl(country);
                         setTimeout(() => handleRunIntel(), 100);
@@ -1514,7 +1693,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-900 transition-all shadow-xl shadow-indigo-600/10 flex items-center gap-3"
                     >
                       <Sparkles className={`w-4 h-4 ${isIntelRunning ? 'animate-pulse' : ''}`} />
-                      Sync Monde
+                      Sync Monde Aléatoire
                     </button>
                     <button
                       onClick={async () => {
@@ -1522,9 +1701,16 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                         setIntelStatus('Mise à jour globale des métadonnées...');
                         try {
                           const res = await academicGatheringService.refreshAllInstitutions();
+                          setNotification({ message: `Succès ! ${res.updated} établissements mis à jour.`, type: 'success' });
                           setIntelStatus(`Succès ! ${res.updated} établissements mis à jour.`);
-                        } catch (e) {
-                          setIntelStatus('Erreur lors de la mise à jour globale.');
+                        } catch (e: any) {
+                          if (e.message?.includes('Quota')) {
+                            setNotification({ message: 'Quota Gemini dépassé. Veuillez réessayer demain.', type: 'error' });
+                            setIntelStatus('Quota dépassé.');
+                          } else {
+                            setNotification({ message: 'Erreur lors de la mise à jour globale.', type: 'error' });
+                            setIntelStatus('Erreur lors de la mise à jour globale.');
+                          }
                         } finally {
                           setIsIntelRunning(false);
                         }
@@ -1533,7 +1719,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       className="bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/10 flex items-center gap-3"
                     >
                       <Zap className={`w-4 h-4 ${isIntelRunning ? 'animate-pulse' : ''}`} />
-                      Update Métadonnées
+                      Refresh Metadata
                     </button>
                   </div>
                 </div>
@@ -1639,6 +1825,109 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                   </div>
                 )}
               </div>
+
+              {/* Nouveau Bloc : Concours de la Fonction Publique */}
+              <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-8">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-lg">
+                    <Briefcase className={`w-8 h-8 ${isCareerSyncRunning ? 'animate-bounce' : ''}`} />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Concours & Opportunités d'État</h3>
+                    <p className="text-sm text-slate-500 font-medium">Récupérez les derniers concours de la Fonction publique et recrutements.</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-6">
+                  <button
+                    onClick={handleCareerSync}
+                    disabled={isCareerSyncRunning}
+                    className="w-full bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-slate-900 transition-all shadow-xl shadow-emerald-600/20 disabled:opacity-50 flex items-center justify-center gap-3"
+                  >
+                    {isCareerSyncRunning ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Search className="w-5 h-5" />
+                    )}
+                    Rechercher les opportunités
+                  </button>
+                </div>
+
+                {careerSyncStatus && (
+                  <div className="mt-6 p-4 bg-white/50 rounded-xl border border-emerald-100 flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${isCareerSyncRunning ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+                    <span className="text-sm font-bold text-slate-700">{careerSyncStatus}</span>
+                  </div>
+                )}
+
+                {careerSyncResult && (
+                  <div className="mt-6 grid grid-cols-1 gap-4">
+                    <div className="p-4 bg-emerald-100 rounded-2xl border border-emerald-200 text-center">
+                      <div className="text-2xl font-black text-emerald-700">{careerSyncResult.added}</div>
+                      <div className="text-[10px] font-black uppercase text-emerald-800">Concours / Offres Récemment Ajoutés</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          ) : activeTab === 'careers' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-100">
+                  <tr>
+                    <th className="px-6 py-4">Titre / Poste</th>
+                    <th className="px-6 py-4">Organisation</th>
+                    <th className="px-6 py-4">Diplôme Requis</th>
+                    <th className="px-6 py-4">Deadline</th>
+                    <th className="px-6 py-4">Statut</th>
+                    <th className="px-6 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loadingCareers ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-500" />
+                        Chargement des opportunités...
+                      </td>
+                    </tr>
+                  ) : careersList.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500 font-medium">
+                        Aucun concours trouvé. Lancez une synchronisation.
+                      </td>
+                    </tr>
+                  ) : (
+                    careersList.map(opp => (
+                      <tr key={opp.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 font-semibold text-slate-900">{opp.title}</td>
+                        <td className="px-6 py-4 text-slate-600">{opp.organization}</td>
+                        <td className="px-6 py-4 text-slate-600">{opp.requiredDegree}</td>
+                        <td className="px-6 py-4 text-slate-600">{opp.deadline}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${
+                            opp.status === 'ouvert' ? 'bg-emerald-100 text-emerald-700' :
+                            opp.status === 'bientôt ouvert' ? 'bg-amber-100 text-amber-700' :
+                            'bg-slate-100 text-slate-600'
+                          }`}>
+                            {opp.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => handleDeleteCareer(opp.id)}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           ) : activeTab === 'users' ? (
             <table className="w-full text-left text-sm">
@@ -1784,6 +2073,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                   <th className="px-6 py-4">Date</th>
                   <th className="px-6 py-4">Méthode</th>
                   <th className="px-6 py-4">Statut</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1798,10 +2088,32 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         payment.status === 'Completed'
                           ? 'bg-green-100 text-green-700'
-                          : 'bg-amber-100 text-amber-700'
+                          : payment.status === 'Pending'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-500'
                       }`}>
-                        {payment.status === 'Completed' ? 'Complété' : 'En attente'}
+                        {payment.status === 'Completed' ? 'Complété' : payment.status === 'Pending' ? 'En attente' : 'Aucun'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {payment.status === 'Pending' && (
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => handleValidatePayment(payment.userId)}
+                            className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors"
+                            title="Valider le paiement"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleRejectPayment(payment.userId)}
+                            className="p-1.5 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors"
+                            title="Rejeter le paiement"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1822,6 +2134,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                 <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
                   <th className="px-6 py-4 rounded-tl-lg">École</th>
                   <th className="px-6 py-4">Type</th>
+                  <th className="px-6 py-4">Pays</th>
                   <th className="px-6 py-4">Ville</th>
                   <th className="px-6 py-4">Filières</th>
                   <th className="px-6 py-4">Statut</th>
@@ -1839,6 +2152,12 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-xs font-medium bg-slate-100 text-slate-700 px-2 py-1 rounded-full">{inst.type}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="flex items-center gap-1.5 text-slate-600 text-sm">
+                        <Globe className="w-3.5 h-3.5 text-slate-400" />
+                        {inst.country}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-slate-600 text-sm">{inst.city}</td>
                     <td className="px-6 py-4 text-slate-600 font-medium">{inst.programs?.length || inst.programsCount || 0}</td>
@@ -2089,6 +2408,63 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Custom Dialogs */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 text-center">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100"
+          >
+            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 mb-4 tracking-tight">Confirmation requise</h3>
+            <p className="text-slate-500 font-medium mb-8 leading-relaxed">{confirmDialog.message}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="px-6 py-3 rounded-2xl bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmDialog.onConfirm}
+                className="px-6 py-3 rounded-2xl bg-slate-900 text-white font-black uppercase tracking-widest text-xs hover:bg-rose-600 transition-all"
+              >
+                Confirmer
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {notification && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-4">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className={`p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4 border ${
+              notification.type === 'success' 
+                ? 'bg-emerald-600 border-emerald-500 text-white' 
+                : 'bg-rose-600 border-rose-500 text-white'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {notification.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+              <span className="font-bold text-sm">{notification.message}</span>
+            </div>
+            <button 
+              onClick={() => setNotification(null)}
+              className="p-1 hover:bg-white/20 rounded-lg transition-colors text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </motion.div>
         </div>
       )}

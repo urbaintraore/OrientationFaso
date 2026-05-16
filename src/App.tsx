@@ -24,9 +24,10 @@ import { EstablishmentDashboard } from './components/establishment/Establishment
 import { ScholarshipHub } from './components/opportunities/ScholarshipHub';
 import { AboutPage } from './components/AboutPage';
 import { analyzeProfile, analyzePostBacProfile } from './services/gemini';
+import { careerGatheringService } from './services/careerGatheringService';
 import { StudentProfile, AnalysisResult, PostBacProfile, UniversityAnalysisResult, SavedProject, UserProfile } from './types';
 import { motion, AnimatePresence } from 'motion/react';
-import { School, GraduationCap } from 'lucide-react';
+import { School, GraduationCap, Building2 } from 'lucide-react';
 
 import { auth, db, requestNotificationPermission } from './lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -84,26 +85,36 @@ export default function App() {
           });
 
           const profileRef = doc(db, 'users', user.uid);
-          const profileSnap = await getDoc(profileRef);
           
-          if (profileSnap.exists()) {
-            const profileData = profileSnap.data() as UserProfile;
-            setUserProfile(profileData);
-            if (profileData.profileType === 'etablissement') {
-              setIsEstablishment(true);
+          // Use onSnapshot for real-time profile updates (like payment validation)
+          const profileUnsubscribe = onSnapshot(profileRef, (docSnap) => {
+            if (docSnap.exists()) {
+              const profileData = docSnap.data() as UserProfile;
+              setUserProfile(profileData);
+              if (profileData.hasPaid) {
+                setHasPaid(true);
+              }
+              if (profileData.profileType === 'etablissement') {
+                setIsEstablishment(true);
+              }
             }
-          } else if (user.email === 'admin@orientationbf.com' || user.email === 'urbain.traoreurb@gmail.com' || user.email === 'urbain.traore@gmail.com') {
-            // Auto-create missing admin profile
+          });
+
+          // Check if profile exists and create if admin
+          const profileSnap = await getDoc(profileRef);
+          if (!profileSnap.exists() && (user.email === 'admin@orientationbf.com' || user.email === 'urbain.traoreurb@gmail.com' || user.email === 'urbain.traore@gmail.com')) {
             const adminProfile: UserProfile = {
               uid: user.uid,
               email: user.email || '',
               displayName: user.displayName || 'Admin',
               profileType: 'system_admin',
-              createdAt: new Date().toISOString()
+              createdAt: new Date().toISOString(),
+              hasPaid: true
             };
             await setDoc(profileRef, adminProfile);
-            setUserProfile(adminProfile);
           }
+
+          return () => profileUnsubscribe();
         } catch (error) {
           console.error("Error fetching user profile:", error);
         }
@@ -241,7 +252,23 @@ export default function App() {
     setError(null);
     setBacProfile(profile);
     try {
-      const result = await analyzePostBacProfile(profile);
+      // Fetch careers from DB to use as context for AI
+      let dbCareersContext = '';
+      try {
+        const careers = await careerGatheringService.getOpportunities();
+        if (careers.length > 0) {
+          dbCareersContext = JSON.stringify(careers.map(c => ({
+            title: c.title,
+            organization: c.organization,
+            status: c.status,
+            compatibleFields: c.compatibleFields
+          })));
+        }
+      } catch (e) {
+        console.warn("Could not fetch careers context", e);
+      }
+
+      const result = await analyzePostBacProfile(profile, dbCareersContext);
       console.log("BAC Analysis result received:", result);
       setBacAnalysis(result);
       setView('results-bac');
@@ -439,10 +466,10 @@ export default function App() {
                 <p className="text-slate-600">Choisis ton niveau pour obtenir une orientation adaptée.</p>
               </div>
               
-              <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+              <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
                 <button
                   onClick={() => handleSelectMode('bepc')}
-                  className="group relative overflow-hidden rounded-3xl bg-white p-8 shadow-lg transition-all hover:shadow-xl hover:-translate-y-1 border border-slate-100 text-left"
+                  className="group relative overflow-hidden rounded-3xl bg-white p-8 shadow-lg transition-all hover:shadow-xl hover:-translate-y-1 border border-slate-100 text-left h-full"
                 >
                   <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                     <School className="h-8 w-8" />
@@ -458,7 +485,7 @@ export default function App() {
 
                 <button
                   onClick={() => handleSelectMode('bac')}
-                  className="group relative overflow-hidden rounded-3xl bg-white p-8 shadow-lg transition-all hover:shadow-xl hover:-translate-y-1 border border-slate-100 text-left"
+                  className="group relative overflow-hidden rounded-3xl bg-white p-8 shadow-lg transition-all hover:shadow-xl hover:-translate-y-1 border border-slate-100 text-left h-full"
                 >
                   <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                     <GraduationCap className="h-8 w-8" />
@@ -469,6 +496,28 @@ export default function App() {
                   </p>
                   <span className="text-emerald-600 font-medium group-hover:translate-x-1 transition-transform inline-block">
                     Choisir l'orientation Université →
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (isAuthenticated && (isEstablishment || isAdmin)) {
+                      setView('establishment-dashboard');
+                    } else {
+                      setView('auth');
+                    }
+                  }}
+                  className="group relative overflow-hidden rounded-3xl bg-white p-8 shadow-lg transition-all hover:shadow-xl hover:-translate-y-1 border border-slate-100 text-left h-full"
+                >
+                  <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                    <Building2 className="h-8 w-8" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-slate-900 mb-2">E-Portail</h3>
+                  <p className="text-slate-600 mb-6">
+                    Espace réservé aux établissements d'enseignement pour gérer leurs filières et communiquer avec les élèves.
+                  </p>
+                  <span className="text-amber-600 font-medium group-hover:translate-x-1 transition-transform inline-block">
+                    Accéder au portail →
                   </span>
                 </button>
               </div>
@@ -689,6 +738,31 @@ export default function App() {
           setView('admin-dashboard');
         }}
       />
+
+      {/* WhatsApp Floating Button */}
+      <a
+        href="https://wa.me/22663375257"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-50 p-4 bg-[#25D366] text-white rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center group"
+        title="Contactez-nous sur WhatsApp"
+      >
+        <svg 
+          viewBox="0 0 24 24" 
+          width="24" 
+          height="24" 
+          stroke="currentColor" 
+          strokeWidth="2" 
+          fill="none" 
+          strokeLinecap="round" 
+          strokeLinejoin="round"
+        >
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        </svg>
+        <span className="max-w-0 overflow-hidden group-hover:max-w-xs group-hover:ml-2 transition-all duration-500 whitespace-nowrap font-bold text-sm">
+          Aide WhatsApp
+        </span>
+      </a>
     </div>
   );
 }

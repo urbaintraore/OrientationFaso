@@ -10,6 +10,11 @@
         "displayName": { "type": "string" },
         "profileType": { "type": "string", "enum": ["student", "parent", "teacher", "etablissement", "system_admin"] },
         "createdAt": { "type": "string", "format": "date-time" },
+        "hasPaid": { "type": "boolean" },
+        "paymentStatus": { "type": "string", "enum": ["none", "pending", "validated", "rejected"] },
+        "paymentMethod": { "type": "string", "enum": ["orange", "moov", "telecel"] },
+        "paymentTransactionId": { "type": "string" },
+        "paymentDate": { "type": "string", "format": "date-time" },
         "fcmToken": { "type": "string" }
       },
       "required": ["uid", "email", "profileType", "createdAt"]

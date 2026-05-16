@@ -21,10 +21,12 @@ function getAiClient(): GoogleGenAI {
  */
 function normalizeString(str: string): string {
   return str
-    .normalize('NFD') // Separate accents from characters
-    .replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, '') // Keep only alphanum
+    .replace(/\b(universite|university|institut|institute|school|ecole|grande|ecoles|univ|inst|superieur|technique|professionnel|groupe|centre|formation)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9]/g, '')
     .trim();
 }
 
@@ -91,8 +93,11 @@ export const academicGatheringService = {
 
       const data = JSON.parse(response.text || '{}');
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Extraction error:", error);
+      if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429') || error.status === 429) {
+        throw new Error("Quota Gemini dépassé (RESOURCE_EXHAUSTED). Veuillez réessayer plus tard.");
+      }
       throw error;
     }
   },
@@ -222,8 +227,11 @@ export const academicGatheringService = {
         const updatedData = JSON.parse(response.text || '{}');
         await institutionService.updateInstitution(docSnap.id, updatedData);
         results.updated++;
-      } catch (e) {
+      } catch (e: any) {
         console.error(`Failed to refresh ${inst.name}`, e);
+        if (e.message?.includes('RESOURCE_EXHAUSTED') || e.message?.includes('429') || e.status === 429) {
+          throw new Error("Quota Gemini dépassé. L'opération a été interrompue. Veuillez réessayer plus tard.");
+        }
         results.failed++;
       }
     }

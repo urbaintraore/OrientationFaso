@@ -20,5 +20,5 @@ export const CITIES = [
 ];
 
 export const INSTITUTION_TYPES = [
-  "Université Publique", "Université Privée", "École d'Ingénieurs", "Institut Supérieur", "Grande École", "Lycée Scientifique", "Lycée Technique", "Centre de Formation"
+  "Université Publique", "Université Privée", "École d'Ingénieurs", "Institut Supérieur", "Grande École", "Lycée Scientifique", "Lycée Technique", "Centre de Formation", "Collège", "Collège et Lycée", "Lycée"
 ];

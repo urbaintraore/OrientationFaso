@@ -107,5 +107,14 @@ export const institutionService = {
       handleFirestoreError(error, OperationType.WRITE, COLLECTION_NAME);
       throw error;
     }
+  },
+
+  async deleteInstitution(id: string) {
+    try {
+      await deleteDoc(doc(db, COLLECTION_NAME, id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, COLLECTION_NAME);
+      throw error;
+    }
   }
 };

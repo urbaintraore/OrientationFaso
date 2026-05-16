@@ -20,6 +20,7 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
   const [selectedType, setSelectedType] = useState<string>('All');
   const [selectedCity, setSelectedCity] = useState<string>('All');
   const [selectedCountry, setSelectedCountry] = useState<string>('All');
+  const [crawlerCountry, setCrawlerCountry] = useState<string>('All');
   
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,7 +57,7 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
     }
     
     setIsSyncing(true);
-    const targetRegion = selectedCountry !== 'All' ? selectedCountry : 'Burkina Faso';
+    const targetRegion = crawlerCountry !== 'All' ? crawlerCountry : 'le monde entier (universités renommées)';
     setSyncStatus(`Moteur d'Intelligence Académique activé pour : ${targetRegion}...`);
     
     let totalAdded = 0;
@@ -87,11 +88,16 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
       
       setSyncStatus(`Terminé ! ${totalAdded} établissements analysés et mis à jour.`);
       await fetchInstitutions();
-    } catch (error) {
-      setSyncStatus("Erreur lors de la collecte intelligente.");
+    } catch (error: any) {
+      console.error(error);
+      if (error.message?.includes('Quota')) {
+        setSyncStatus("Quota Gemini dépassé. Veuillez réessayer demain.");
+      } else {
+        setSyncStatus("Erreur lors de la collecte intelligente.");
+      }
     } finally {
       setIsSyncing(false);
-      setTimeout(() => setSyncStatus(''), 5000);
+      setTimeout(() => setSyncStatus(''), 7000);
     }
   };
 
@@ -155,18 +161,34 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
                     </div>
                   </div>
                   
-                  <button 
-                    onClick={handleSync}
-                    disabled={isSyncing}
-                    className={`w-full py-3 rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 transition-all shadow-xl
-                      ${isSyncing 
-                        ? 'bg-amber-500 text-white cursor-wait' 
-                        : 'bg-white text-indigo-900 hover:bg-amber-400 hover:text-white hover:scale-[1.02] active:scale-95'
-                      }`}
-                  >
-                    {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {isSyncing ? 'Indexation en cours...' : 'Lancer le Crawler IA'}
-                  </button>
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-2">
+                       <label className="text-[9px] font-black uppercase text-indigo-200 tracking-widest pl-1">Région cible</label>
+                       <select 
+                         value={crawlerCountry}
+                         onChange={(e) => setCrawlerCountry(e.target.value)}
+                         className="w-full bg-white/20 backdrop-blur-md border border-white/20 rounded-xl text-xs text-white p-2.5 outline-none focus:ring-2 focus:ring-amber-400/50 transition-all cursor-pointer"
+                       >
+                         <option value="All" className="text-slate-900">🌍 Monde entier</option>
+                         {allCountries.map(c => (
+                           <option key={c} value={c} className="text-slate-900">{c}</option>
+                         ))}
+                       </select>
+                    </div>
+                    
+                    <button 
+                      onClick={handleSync}
+                      disabled={isSyncing}
+                      className={`w-full py-3 rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 transition-all shadow-xl
+                        ${isSyncing 
+                          ? 'bg-amber-500 text-white cursor-wait' 
+                          : 'bg-white text-indigo-900 hover:bg-amber-400 hover:text-white hover:scale-[1.02] active:scale-95'
+                        }`}
+                    >
+                      {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                      {isSyncing ? 'Indexation en cours...' : 'Lancer le Crawler IA'}
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-2 px-1">
                     <div className="flex -space-x-2">

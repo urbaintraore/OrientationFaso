@@ -66,6 +66,12 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
           <button onClick={onPricing} className="hover:text-indigo-600 transition-colors">
             Nos Offres
           </button>
+          {(isEstablishment || isAdmin) && (
+            <button onClick={onEstablishmentDashboard} className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-xl transition-all">
+              <Building2 className="w-4 h-4" />
+              E-Portail
+            </button>
+          )}
           {isAuthenticated && (
             <button onClick={onProjects} className="hover:text-indigo-600 transition-colors flex items-center gap-2">
               <BookOpen className="w-4 h-4" />
@@ -141,12 +147,6 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
             </button>
           )}
 
-          {(isEstablishment || isAdmin) && (
-            <button onClick={onEstablishmentDashboard} className="hidden md:flex text-indigo-600 hover:bg-indigo-50 p-2 rounded-full transition-colors" title="E-Portail">
-              <Building2 className="w-5 h-5" />
-            </button>
-          )}
-          
           {isAuthenticated ? (
             <button 
               onClick={onLogout}

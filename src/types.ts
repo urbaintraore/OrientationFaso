@@ -117,6 +117,8 @@ export type InstitutionType =
   | 'Collège' 
   | 'Lycée' 
   | 'Lycée Technique' 
+  | 'Lycée Scientifique'
+  | 'Collège et Lycée'
   | 'École Internationale';
 
 export interface Program {
@@ -153,6 +155,11 @@ export interface UserProfile {
   displayName: string;
   profileType: 'student' | 'parent' | 'teacher' | 'etablissement' | 'system_admin';
   createdAt: string;
+  hasPaid?: boolean;
+  paymentStatus?: 'none' | 'pending' | 'validated' | 'rejected';
+  paymentMethod?: 'orange' | 'moov' | 'telecel';
+  paymentTransactionId?: string;
+  paymentDate?: string;
 }
 
 export interface UFR {
@@ -267,6 +274,26 @@ export interface UniversityMajorRecommendation {
   matchReason: string;
 }
 
+export interface CareerOpportunity {
+  id: string;
+  title: string;
+  type: 'concours' | 'recrutement_societe_etat' | 'autre';
+  organization: string; // e.g. "Ministère de la Fonction Publique", "ONEA", "SONABEL"
+  requiredDegree: string;
+  compatibleFields: string[];
+  positionsCount: number;
+  conditions: string;
+  ageLimit: string;
+  documentsRequired: string[];
+  deadline: string;
+  officialUrl: string;
+  pdfUrl?: string;
+  status: 'ouvert' | 'bientôt ouvert' | 'expiré';
+  createdAt: string;
+  updatedAt: string;
+  isVerified: boolean;
+}
+
 export interface UniversityAnalysisResult {
   recommendedMajors: UniversityMajorRecommendation[]; // Changed from top5Majors to support 10+
   successProbability: number;
@@ -285,6 +312,7 @@ export interface UniversityAnalysisResult {
     asia: string[];
     canada: string[];
   };
+  careerOpportunities?: CareerOpportunity[]; // Nouveaux concours et recrutements d'État
 }
 
 export interface SavedProject {
