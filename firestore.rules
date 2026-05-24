@@ -208,6 +208,11 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    match /useful_links/{linkId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
     match /career_competitions/{competitionId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();

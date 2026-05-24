@@ -1,20 +1,10 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { Institution, Program, InstitutionType } from "../types";
 import { institutionService } from "./institutionService";
 import { programService } from "./programService";
 import { db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 
-let aiClient: GoogleGenAI | null = null;
-
-function getAiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '';
-    if (!apiKey) throw new Error("Clé API Gemini introuvable.");
-    aiClient = new GoogleGenAI({ apiKey });
-  }
-  return aiClient;
-}
+const API_BASE = '/api/gemini';
 
 /**
  * Normalizes a string for comparison (lowercase, no accents, no special chars).
@@ -35,69 +25,19 @@ export const academicGatheringService = {
    * Analyzes a text content (from a website) and extracts Institution and Programs data.
    */
   async extractAcademicData(rawContent: string, sourceUrl: string): Promise<{ institution: Partial<Institution>; programs: Partial<Program>[] }> {
-    const prompt = `
-      Tu es un extracteur de données académiques intelligent. Analyse le contenu texte suivant provenant d'un site web universitaire (${sourceUrl}) et extrait les informations structurées.
-      
-      CONTENU :
-      ${rawContent}
-      
-      MISSION :
-      1. Extraire les détails de l'établissement (Nom, Type, Pays, Ville, etc.).
-      2. Lister toutes les filières (programmes) détectées.
-      3. Compter précisément le nombre de filières.
-      4. Déterminer les niveaux (BTS, Licence, Master, Doctorat, PhD).
-      5. Associer un score d'employabilité (0-100) et une tendance (Très Forte Demande, etc.) pour chaque filière selon le marché du pays concerné (${sourceUrl}).
-
-      FORMAT JSON ATTENDU :
-      {
-        "institution": {
-          "name": "Nom complet",
-          "type": "Université Publique" | "Université Privée" | "Grande École" | "Institut",
-          "description": "Résumé d'excellence",
-          "city": "Ville réelle",
-          "country": "Pays réel",
-          "address": "...",
-          "phone": "...",
-          "email": "...",
-          "website": "${sourceUrl}",
-          "socialLinks": {
-            "facebook": "...",
-            "linkedin": "...",
-            "twitter": "...",
-            "instagram": "..."
-          },
-          "programsCount": 123,
-          "degrees": ["Licence", "Master", "PhD", "..."]
-        },
-        "programs": [
-          {
-            "name": "Nom filière",
-            "field": "Domaine (Informatique, Droit...)",
-            "degreeLevel": "Licence",
-            "duration": "3 ans",
-            "description": "...",
-            "careerOpportunities": ["Métier 1", "..."],
-            "employmentTrend": "Très Forte Demande",
-            "employmentScore": 95
-          }
-        ]
-      }
-    `;
-
     try {
-      const response = await getAiClient().models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
+      const response = await fetch(`${API_BASE}/extract-academic-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawContent, sourceUrl })
       });
-
-      const data = JSON.parse(response.text || '{}');
-      return data;
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to extract academic data");
+      }
+      return response.json();
     } catch (error: any) {
       console.error("Extraction error:", error);
-      if (error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429') || error.status === 429) {
-        throw new Error("Quota Gemini dépassé (RESOURCE_EXHAUSTED). Veuillez réessayer plus tard.");
-      }
       throw error;
     }
   },
@@ -201,38 +141,26 @@ export const academicGatheringService = {
     for (const docSnap of snap.docs) {
       const inst = docSnap.data() as Institution;
       try {
-        // Use Gemini to find social links and exact program count if not already accurate
-        const prompt = `Recherche les informations officielles mis à jour pour l'établissement "${inst.name}" à ${inst.city}, ${inst.country}.
-        Donne :
-        1. Le nombre exact de filières proposées actuellement.
-        2. Les liens officiels : Site web, Page Facebook, LinkedIn, Instagram.
-        
-        FORMAT JSON :
-        {
-          "programsCount": number,
-          "website": "string",
-          "socialLinks": {
-            "facebook": "string",
-            "linkedin": "string",
-            "instagram": "string"
-          }
-        }`;
-
-        const response = await getAiClient().models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: prompt,
-          config: { responseMimeType: "application/json" }
+        const response = await fetch(`${API_BASE}/refresh-institution`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: inst.name, city: inst.city, country: inst.country })
         });
 
-        const updatedData = JSON.parse(response.text || '{}');
+        if (!response.ok) {
+           const err = await response.json();
+           throw new Error(err.error || "Failed to refresh");
+        }
+        
+        const updatedData = await response.json();
         await institutionService.updateInstitution(docSnap.id, updatedData);
         results.updated++;
       } catch (e: any) {
         console.error(`Failed to refresh ${inst.name}`, e);
-        if (e.message?.includes('RESOURCE_EXHAUSTED') || e.message?.includes('429') || e.status === 429) {
-          throw new Error("Quota Gemini dépassé. L'opération a été interrompue. Veuillez réessayer plus tard.");
-        }
         results.failed++;
+        if (e.message && e.message.includes('Quota')) {
+           throw e;
+        }
       }
     }
     return results;

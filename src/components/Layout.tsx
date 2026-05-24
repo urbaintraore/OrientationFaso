@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, LineChart, Building2, Bell, X, ExternalLink, Menu, Info, GraduationCap, School, CreditCard } from 'lucide-react';
+import { BookOpen, LineChart, Building2, Bell, X, ExternalLink, Menu, Info, GraduationCap, School, CreditCard, Link as LinkIcon } from 'lucide-react';
 import { Logo } from './Logo';
 import { notificationService, AppNotification } from '../services/notificationService';
 import { motion, AnimatePresence } from 'motion/react';
@@ -14,13 +14,14 @@ interface HeaderProps {
   onProjects?: () => void;
   onMarketplace?: () => void;
   onScholarships?: () => void;
+  onUsefulLinks?: () => void;
   onAdmin?: () => void;
   onEstablishmentDashboard?: () => void;
   onAbout?: () => void;
   isEstablishment?: boolean;
 }
 
-export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onLogin, onLogout, onPricing, onProjects, onMarketplace, onScholarships, onAdmin, onEstablishmentDashboard, onAbout }: HeaderProps) {
+export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onLogin, onLogout, onPricing, onProjects, onMarketplace, onScholarships, onUsefulLinks, onAdmin, onEstablishmentDashboard, onAbout }: HeaderProps) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -57,8 +58,10 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
             À Propos
           </button>
           <button onClick={onScholarships} className="hover:text-indigo-600 transition-colors flex items-center gap-1">
-            <span className="bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase font-black">Plus</span>
-            Bourses & Aides
+            Bourses-Aides-Concours
+          </button>
+          <button onClick={onUsefulLinks} className="hover:text-indigo-600 transition-colors">
+            Liens utiles
           </button>
           <button onClick={onMarketplace} className="hover:text-indigo-600 transition-colors">
             Écoles & Universités
@@ -209,7 +212,14 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
                 className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 text-slate-700 font-bold text-sm transition-colors"
               >
                 <GraduationCap className="w-4 h-4 text-indigo-500" />
-                Bourses & Aides
+                Bourses-Aides-Concours
+              </button>
+              <button 
+                onClick={() => { onUsefulLinks?.(); setIsMobileMenuOpen(false); }}
+                className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 text-slate-700 font-bold text-sm transition-colors"
+              >
+                <LinkIcon className="w-4 h-4 text-slate-400" />
+                Liens utiles
               </button>
               <button 
                 onClick={() => { onPricing?.(); setIsMobileMenuOpen(false); }}

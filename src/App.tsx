@@ -8,6 +8,7 @@ import { Header, Footer } from './components/Layout';
 import { Partners } from './components/Partners';
 import { Hero } from './components/Hero';
 import { ScholarshipLanding } from './components/ScholarshipLanding';
+import { UsefulLinksView } from './components/UsefulLinksView';
 import { AssessmentForm } from './components/AssessmentForm';
 import { PostBacForm } from './components/PostBacForm';
 import { ResultsDashboard } from './components/ResultsDashboard';
@@ -45,7 +46,7 @@ async function testFirebaseConnection() {
   }
 }
 
-type ViewState = 'hero' | 'mode-selection' | 'auth' | 'payment' | 'form-bepc' | 'form-bac' | 'results-bepc' | 'results-bac' | 'methodology' | 'admin-dashboard' | 'establishment-dashboard' | 'pricing' | 'project-list' | 'marketplace' | 'institution-details' | 'scholarships' | 'about';
+type ViewState = 'hero' | 'mode-selection' | 'auth' | 'payment' | 'form-bepc' | 'form-bac' | 'results-bepc' | 'results-bac' | 'methodology' | 'admin-dashboard' | 'establishment-dashboard' | 'pricing' | 'project-list' | 'marketplace' | 'institution-details' | 'scholarships' | 'about' | 'useful-links';
 
 export default function App() {
   const [view, setView] = useState<ViewState>('hero');
@@ -238,9 +239,9 @@ export default function App() {
       setBepcAnalysis(result);
       setView('results-bepc');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (error) {
+    } catch (error: any) {
       console.error("BEPC Analysis failed:", error);
-      setError("Une erreur est survenue lors de l'analyse. Veuillez réessayer ou vérifier votre connexion.");
+      setError(error.message || "Une erreur est survenue lors de l'analyse. Veuillez réessayer.");
     } finally {
       setIsLoading(false);
     }
@@ -273,9 +274,9 @@ export default function App() {
       setBacAnalysis(result);
       setView('results-bac');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (error) {
+    } catch (error: any) {
       console.error("BAC Analysis failed:", error);
-      setError("Une erreur est survenue lors de l'analyse. Veuillez réessayer ou vérifier votre connexion.");
+      setError(error.message || "Une erreur est survenue lors de l'analyse. Veuillez réessayer.");
     } finally {
       setIsLoading(false);
     }
@@ -378,6 +379,7 @@ export default function App() {
         onProjects={() => setView('project-list')}
         onMarketplace={() => setView('marketplace')}
         onScholarships={() => setView('scholarships')}
+        onUsefulLinks={() => setView('useful-links')}
         onAdmin={() => setView('admin-dashboard')}
         onEstablishmentDashboard={() => setView('establishment-dashboard')}
         onAbout={() => setView('about')}
@@ -439,6 +441,17 @@ export default function App() {
                 setView('scholarships');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }} />
+            </motion.div>
+          )}
+
+          {view === 'useful-links' && (
+            <motion.div
+              key="useful-links"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <UsefulLinksView />
             </motion.div>
           )}
 

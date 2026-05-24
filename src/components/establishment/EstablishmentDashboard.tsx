@@ -22,7 +22,8 @@ import {
   Instagram,
   CheckCircle,
   Loader2,
-  Trash
+  Trash,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { doc, getDoc } from 'firebase/firestore';
@@ -32,6 +33,7 @@ import { institutionService } from '../../services/institutionService';
 import { ufrService } from '../../services/ufrService';
 import { programService } from '../../services/programService';
 import { postService } from '../../services/postService';
+import { deduplicationService } from '../../services/deduplicationService';
 import { auth, db } from '../../lib/firebase';
 
 import { MarketTrendsDashboard } from './MarketTrendsDashboard';
@@ -103,11 +105,26 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
     website: '',
     email: ''
   });
+  const [duplicateWarning, setDuplicateWarning] = useState<Institution[]>([]);
 
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
     const user = auth.currentUser;
     if (!user) return;
+
+    if (duplicateWarning.length === 0) {
+      setIsSaving(true);
+      try {
+        const similars = await deduplicationService.checkSimilarName(setupData.name);
+        if (similars.length > 0) {
+          setDuplicateWarning(similars);
+          setIsSaving(false);
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
     setIsSaving(true);
     try {
@@ -183,6 +200,34 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
                  </button>
                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">Configuration Initiale</h2>
               </div>
+
+              {duplicateWarning.length > 0 && (
+                <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                  <div className="flex gap-3 text-amber-800">
+                    <AlertCircle className="w-6 h-6 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-bold">Attention : Cet établissement pourrait déjà exister !</h4>
+                      <p className="text-sm mt-1 mb-3">Nous avons trouvé des correspondances proches dans notre base de données :</p>
+                      <ul className="space-y-2 mb-3">
+                        {duplicateWarning.map(dup => (
+                          <li key={dup.id} className="text-sm bg-white/50 p-2 rounded-lg border border-amber-100 flex items-center justify-between">
+                            <span className="font-semibold">{dup.name}</span>
+                            <span className="text-xs opacity-70">{dup.city}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-sm">Si vous êtes sûr qu'il s'agit d'un nouvel établissement, cliquez à nouveau sur Enregistrer.</p>
+                      <button
+                        type="button"
+                        onClick={() => setDuplicateWarning([])}
+                        className="mt-3 text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1.5 rounded-lg hover:bg-amber-200"
+                      >
+                        Vérifier et corriger le nom
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleSetup} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">

@@ -99,7 +99,7 @@ export function Payment({ onPaymentComplete }: PaymentProps) {
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold text-slate-900 mb-2">Paiement Manuel</h2>
         <p className="text-slate-600">
-          Accède à ton analyse complète pour seulement <span className="font-bold text-indigo-600">2000 FCFA</span>
+          Accède à ton analyse complète pour seulement <span className="font-bold text-indigo-600">1000 FCFA</span>
         </p>
       </div>
 
@@ -174,7 +174,7 @@ export function Payment({ onPaymentComplete }: PaymentProps) {
                 Instructions de paiement
               </h3>
               <p className="text-sm text-indigo-800 mb-4">
-                Veuillez effectuer un transfert de <span className="font-bold text-lg">2000 FCFA</span> au numéro suivant :
+                Veuillez effectuer un transfert de <span className="font-bold text-lg">1000 FCFA</span> au numéro suivant :
               </p>
               
               <div className="bg-white p-3 rounded-xl border border-indigo-200 flex items-center justify-between group">
@@ -241,7 +241,7 @@ export function Payment({ onPaymentComplete }: PaymentProps) {
                 Validation manuelle sécurisée
               </p>
               <a 
-                href={`https://wa.me/22663375257?text=Bonjour, je viens d'effectuer un paiement de 2000 FCFA via ${method} pour mon rapport d'orientation.`}
+                href={`https://wa.me/22663375257?text=Bonjour, je viens d'effectuer un paiement de 1000 FCFA via ${method} pour mon rapport d'orientation.`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1.5"

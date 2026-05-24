@@ -341,7 +341,7 @@ export interface GovernmentOpportunity {
   pdfUrl?: string;
   thumbnail?: string;
   status: GovernmentOpportunityStatus;
-  source: 'CIOSPB' | 'FOSER' | 'Gouvernement';
+  source: string;
   levelConcerns?: string[]; // e.g. ["Bachelor", "Master"]
   countryConcerns?: string[];
   createdAt: string;

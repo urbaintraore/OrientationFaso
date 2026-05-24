@@ -304,8 +304,8 @@ export function InstitutionDetails({ institutionId, onBack }: InstitutionDetails
               initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
             >
-              {ufrs.map(ufr => (
-                <div key={ufr.id} className="bg-white p-8 rounded-3xl border border-slate-200/60 shadow-sm">
+              {ufrs.map((ufr, index) => (
+                <div key={ufr.id || `ufr-${index}`} className="bg-white p-8 rounded-3xl border border-slate-200/60 shadow-sm">
                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-6">
                       <GraduationCap className="w-6 h-6" />
                    </div>
@@ -328,8 +328,8 @@ export function InstitutionDetails({ institutionId, onBack }: InstitutionDetails
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
             >
-              {programs.map(prog => (
-                <div key={prog.id} className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden flex flex-col group hover:border-indigo-600 transition-all">
+              {programs.map((prog, index) => (
+                <div key={prog.id || `prog-${index}`} className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden flex flex-col group hover:border-indigo-600 transition-all">
                    <div className="p-8 pb-4">
                       <div className="flex items-center gap-2 mb-4">
                         <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest font-mono">
@@ -400,8 +400,8 @@ export function InstitutionDetails({ institutionId, onBack }: InstitutionDetails
               initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
               className="columns-1 md:columns-2 gap-8 space-y-8"
             >
-              {posts.map(post => (
-                <div key={post.id} className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden break-inside-avoid">
+              {posts.map((post, index) => (
+                <div key={post.id || `post-${index}`} className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden break-inside-avoid">
                    {post.mediaUrl && (
                      <div className="aspect-video relative overflow-hidden">
                        <img src={post.mediaUrl} className="w-full h-full object-cover" alt="" />
@@ -443,8 +443,8 @@ export function InstitutionDetails({ institutionId, onBack }: InstitutionDetails
               className="max-w-2xl mx-auto space-y-6"
             >
               {/* Similar reviews logic as before but more polished */}
-              {institution.reviews?.map(review => (
-                 <div key={review.id} className="bg-white p-8 rounded-3xl border border-slate-200/60 shadow-sm">
+              {institution.reviews?.map((review, index) => (
+                 <div key={review.id || `review-${index}`} className="bg-white p-8 rounded-3xl border border-slate-200/60 shadow-sm shadow-sm">
                     <div className="flex items-center gap-4 mb-6">
                       <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-xl">
                         {review.author[0]}

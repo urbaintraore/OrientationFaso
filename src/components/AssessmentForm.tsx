@@ -354,6 +354,17 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
                     <option value="F">Féminin</option>
                   </select>
                 </div>
+                <div className="sm:col-span-2">
+                  <FileUploader
+                    label="Téléchargez votre relevé de notes BEPC (Optionnel)"
+                    folder="transcripts"
+                    accept="image/*,application/pdf"
+                    onUploadComplete={setTranscriptUrl}
+                  />
+                  {transcriptUrl && (
+                    <p className="text-[10px] text-emerald-600 font-bold mt-1 uppercase">Relevé chargé avec succès</p>
+                  )}
+                </div>
               </div>
             </motion.div>
           )}
@@ -387,17 +398,6 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
               <p className="text-sm text-slate-500">Tes résultats les plus récents sont les plus importants.</p>
               
               <TrimesterInputGroup label="Classe de 3ème" prefix="grade3" errorPrefix={errors} />
-              <div className="mt-8 border-t border-slate-100 pt-8">
-                <FileUploader 
-                  label="Ou téléchargez votre relevé de notes BEPC (Optionnel)"
-                  folder="transcripts"
-                  accept="image/*,application/pdf"
-                  onUploadComplete={setTranscriptUrl}
-                />
-                {transcriptUrl && (
-                  <p className="text-[10px] text-emerald-600 font-bold mt-1 uppercase">Relevé chargé avec succès</p>
-                )}
-              </div>
               <ExamInputGroup label="Résultats BEPC (Estimés ou Réels)" prefix="bepc" errorPrefix={errors} />
             </motion.div>
           )}

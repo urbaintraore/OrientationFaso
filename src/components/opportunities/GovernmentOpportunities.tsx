@@ -168,7 +168,7 @@ export const GovernmentOpportunities: React.FC<GovernmentOpportunitiesProps> = (
                 : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
               }`}
             >
-              {filter === 'all' ? 'Toutes les offres' : filter.charAt(0).toUpperCase() + filter.slice(1) + 's'}
+              {filter === 'all' ? 'Toutes les offres' : filter === 'concours' ? 'Concours de la fonction publique' : filter.charAt(0).toUpperCase() + filter.slice(1) + 's'}
             </button>
           ))}
         </div>

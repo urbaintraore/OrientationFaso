@@ -12,7 +12,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { GovernmentOpportunity, GovernmentOpportunityType, GovernmentOpportunityStatus } from '../types';
+import { GovernmentOpportunity, GovernmentOpportunityType, GovernmentOpportunityStatus, CareerOpportunity } from '../types';
 
 const COLLECTION_NAME = 'government_opportunities';
 
@@ -84,7 +84,7 @@ export const governmentOpportunityService = {
     }
   },
 
-  async syncWithSource(source: 'CIOSPB' | 'FOSER', opportunities: Omit<GovernmentOpportunity, 'id' | 'createdAt' | 'updatedAt'>[]) {
+  async syncWithSource(source: string, opportunities: Omit<GovernmentOpportunity, 'id' | 'createdAt' | 'updatedAt'>[]) {
     try {
       let added = 0;
       let updated = 0;
@@ -107,6 +107,50 @@ export const governmentOpportunityService = {
       return { added, updated };
     } catch (error) {
       console.error(`Error syncing ${source}:`, error);
+      throw error;
+    }
+  },
+
+  async syncCareerOpportunitiesToGov(opportunities: CareerOpportunity[]) {
+    try {
+      let added = 0;
+      let updated = 0;
+
+      for (const opp of opportunities) {
+        // Check if exists by title or officialUrl to avoid duplicates
+        const q = query(
+          collection(db, COLLECTION_NAME), 
+          where('title', '==', opp.title)
+        );
+        const snap = await getDocs(q);
+
+        const data = {
+          title: opp.title,
+          description: opp.conditions || opp.title,
+          organization: opp.organization,
+          officialUrl: opp.officialUrl || '',
+          deadline: opp.deadline || 'Non renseigné',
+          eligibility: opp.requiredDegree || 'Non spécifié',
+          requiredDocuments: [],
+          type: 'concours' as GovernmentOpportunityType,
+          status: 'ouverte' as GovernmentOpportunityStatus,
+          pdfUrl: null,
+          source: 'CareerSync'
+        };
+
+        if (snap.empty) {
+          await this.addOpportunity(data);
+          added++;
+        } else {
+          const existingId = snap.docs[0].id;
+          await this.updateOpportunity(existingId, data);
+          updated++;
+        }
+      }
+
+      return { added, updated };
+    } catch (error) {
+      console.error("Error syncing career opportunities:", error);
       throw error;
     }
   }

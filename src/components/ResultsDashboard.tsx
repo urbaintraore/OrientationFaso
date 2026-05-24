@@ -55,7 +55,7 @@ const PremiumOverlay = ({ onUpgrade }: { onUpgrade: () => void }) => (
       onClick={onUpgrade}
       className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm hover:bg-indigo-700 transition-colors shadow-md"
     >
-      Débloquer (2000 FCFA)
+      Débloquer (1000 FCFA)
     </button>
   </div>
 );

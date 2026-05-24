@@ -1,5 +1,6 @@
 import { analyzeGovernmentContent } from "./gemini";
 import { governmentOpportunityService } from "./governmentOpportunityService";
+import { careerGatheringService } from "./careerGatheringService";
 import { GovernmentOpportunity } from "../types";
 
 export const governmentGatheringService = {
@@ -31,7 +32,8 @@ export const governmentGatheringService = {
   async gatherAll() {
     const sources = [
       { url: 'https://www.ciospb.gov.bf/actualites', source: 'CIOSPB' },
-      { url: 'https://foser.bf/actualites', source: 'FOSER' }
+      { url: 'https://foser.bf/actualites', source: 'FOSER' },
+      { url: 'https://www.econcours.gov.bf/categorie-concours', source: 'ECONCOURS' }
     ];
 
     const results = {
@@ -48,8 +50,13 @@ export const governmentGatheringService = {
         // 1. Analyze initial content
         const opportunities = await analyzeGovernmentContent(content, url, source);
         
-        if (opportunities.length > 0) {
-          const syncResult = await governmentOpportunityService.syncWithSource(source as any, opportunities as any);
+        const mappedOpportunities = opportunities.map(opp => ({
+          ...opp,
+          type: source === 'ECONCOURS' ? 'concours' : opp.type
+        }));
+        
+        if (mappedOpportunities.length > 0) {
+          const syncResult = await governmentOpportunityService.syncWithSource(source as any, mappedOpportunities as any);
           results.added += syncResult.added;
           results.updated += syncResult.updated;
         }
@@ -63,6 +70,59 @@ export const governmentGatheringService = {
       }
     }
 
+    // Also sync career opportunities
+    try {
+      console.log('Gathering started for CareerSync...');
+      const careerResults = await careerGatheringService.crawlOpportunities();
+      console.log('Career results:', careerResults);
+      if (careerResults.addedOpportunities && careerResults.addedOpportunities.length > 0) {
+        console.log(`Syncing ${careerResults.addedOpportunities.length} opportunities...`);
+        const syncResults = await governmentOpportunityService.syncCareerOpportunitiesToGov(careerResults.addedOpportunities);
+        results.added += syncResults.added;
+        results.updated += syncResults.updated;
+        console.log('Sync results:', syncResults);
+      }
+    } catch (error: any) {
+      console.error('Error gathering from CareerSync:', error);
+      results.errors.push(`CareerSync: ${error.message}`);
+    }
+
     return results;
+  },
+
+  /**
+   * Specifically gather, search and sync public competitions from eConcours
+   */
+  async gatherEconcoursOnly() {
+    const url = 'https://www.econcours.gov.bf/categorie-concours';
+    const source = 'ECONCOURS';
+    try {
+      console.log(`Gathering started for ${source} specifically...`);
+      const { content } = await this.fetchSourceContent(url);
+      
+      // Analyze content with Gemini
+      const opportunities = await analyzeGovernmentContent(content, url, source);
+      
+      const mappedOpportunities = opportunities.map(opp => ({
+        ...opp,
+        type: 'concours' as any, // Force the type to 'concours'
+        source: 'ECONCOURS',
+        isVerified: true
+      }));
+      
+      if (mappedOpportunities.length > 0) {
+        const syncResult = await governmentOpportunityService.syncWithSource(source, mappedOpportunities as any);
+        return {
+          added: syncResult.added,
+          updated: syncResult.updated,
+          opportunities: mappedOpportunities,
+          error: null
+        };
+      }
+      return { added: 0, updated: 0, opportunities: [], error: null };
+    } catch (error: any) {
+      console.error(`Error gathering specifically from ${source}:`, error);
+      throw error;
+    }
   }
 };

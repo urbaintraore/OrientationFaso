@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Users, CreditCard, CheckCircle, XCircle, Search, Trash2, Plus, X, Eye, GraduationCap, School, Calendar, Filter, Download, FileText, TrendingUp, AlertTriangle, ToggleLeft as ToggleLeftIcon, ToggleRight as ToggleRightIcon, Loader2, RefreshCw, Zap, Sparkles, Building2, Bell, ShieldCheck, AlertCircle, Globe, Briefcase } from 'lucide-react';
-import { AnalysisResult, UniversityAnalysisResult } from '../types';
+import { Users, CreditCard, CheckCircle, XCircle, Search, Trash2, Plus, X, Eye, GraduationCap, School, Calendar, Filter, Download, FileText, TrendingUp, AlertTriangle, ToggleLeft as ToggleLeftIcon, ToggleRight as ToggleRightIcon, Loader2, RefreshCw, Zap, Sparkles, Building2, Bell, ShieldCheck, AlertCircle, Globe, Briefcase, ExternalLink } from 'lucide-react';
+import { AnalysisResult, UniversityAnalysisResult, GovernmentOpportunity } from '../types';
 import { mockInstitutions } from '../data/mockInstitutions';
 import { jsPDF } from 'jspdf';
 import { collection, getDocs, query, orderBy, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -10,8 +10,13 @@ import { CareerOpportunity } from '../types';
 import { academicGatheringService } from '../services/academicGatheringService';
 import { careerGatheringService } from '../services/careerGatheringService';
 import { governmentGatheringService } from '../services/governmentGatheringService';
+import { governmentOpportunityService } from '../services/governmentOpportunityService';
 import { notificationService } from '../services/notificationService';
 import { crawlInstitutions } from '../services/gemini';
+import { deduplicationService, DuplicateCluster } from '../services/deduplicationService';
+import { DeduplicationPanel } from './DeduplicationPanel';
+import { UsefulLinksPanel } from './UsefulLinksPanel';
+import { Layers } from 'lucide-react';
 
 // Mock data for users with more details
 const INITIAL_USERS = [
@@ -472,7 +477,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   };
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'users' | 'payments' | 'institutions' | 'notifications' | 'intelligence' | 'gov_sync' | 'careers'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'payments' | 'institutions' | 'notifications' | 'intelligence' | 'gov_sync' | 'deduplication' | 'links' | 'concours'>('users');
   
   // Custom Dialog/Toast states
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
@@ -494,33 +499,81 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [careerSyncStatus, setCareerSyncStatus] = useState('');
   const [careerSyncResult, setCareerSyncResult] = useState<{added: number} | null>(null);
 
-  // Career Management state
-  const [careersList, setCareersList] = useState<CareerOpportunity[]>([]);
-  const [loadingCareers, setLoadingCareers] = useState(false);
+  // Concours automatic crawl and list states
+  const [concoursList, setConcoursList] = useState<GovernmentOpportunity[]>([]);
+  const [loadingConcours, setLoadingConcours] = useState(false);
+  const [isCrawlingConcours, setIsCrawlingConcours] = useState(false);
+  const [concoursCrawlStatus, setConcoursCrawlStatus] = useState('');
+  const [concoursCrawlResult, setConcoursCrawlResult] = useState<{ added: number; updated: number; error: string | null } | null>(null);
+  const [concoursSearchTerm, setConcoursSearchTerm] = useState('');
 
-  const fetchCareers = async () => {
-    setLoadingCareers(true);
+  const fetchConcoursList = async () => {
+    setLoadingConcours(true);
     try {
-      const data = await careerGatheringService.getOpportunities();
-      setCareersList(data);
-    } catch(e) {
-      console.error(e);
+      const data = await governmentOpportunityService.getAllOpportunities({ type: 'concours' });
+      setConcoursList(data);
+    } catch (error) {
+      console.error("Error fetching concours list:", error);
     } finally {
-      setLoadingCareers(false);
+      setLoadingConcours(false);
+    }
+  };
+
+  const handleConcoursCrawl = async () => {
+    setIsCrawlingConcours(true);
+    setConcoursCrawlStatus('Connexion sécurisée à econcours.gov.bf...');
+    setConcoursCrawlResult(null);
+    try {
+      setConcoursCrawlStatus('Récupération et extraction du contenu de https://www.econcours.gov.bf/categorie-concours...');
+      const res = await governmentGatheringService.gatherEconcoursOnly();
+      setConcoursCrawlResult({
+        added: res.added,
+        updated: res.updated,
+        error: res.error
+      });
+      setConcoursCrawlStatus('Recherche et indexation automatique des concours terminées.');
+      setNotification({ message: `Scraping réussi : ${res.added} concours ajoutés, ${res.updated} concours mis à jour.`, type: 'success' });
+      await fetchConcoursList();
+    } catch (error: any) {
+      console.error(error);
+      setConcoursCrawlStatus(`Échec lors du scraping: ${error.message || 'Erreur de connexion'}`);
+      setConcoursCrawlResult({
+        added: 0,
+        updated: 0,
+        error: error.message || 'Erreur lors de la récupération des données.'
+      });
+    } finally {
+      setIsCrawlingConcours(false);
+    }
+  };
+
+  const handleDeleteConcours = async (id: string, name: string) => {
+    if (confirm(`Voulez-vous supprimer le concours "${name}" ?`)) {
+      try {
+        await governmentOpportunityService.deleteOpportunity(id);
+        setNotification({ message: 'Concours supprimé avec succès.', type: 'success' });
+        await fetchConcoursList();
+      } catch (e: any) {
+        setNotification({ message: `Erreur de suppression: ${e.message}`, type: 'error' });
+      }
     }
   };
 
   useEffect(() => {
-    if (activeTab === 'careers') {
-      fetchCareers();
+    if (activeTab === 'concours') {
+      fetchConcoursList();
     }
   }, [activeTab]);
+
+
 
   const handleGovSync = async () => {
     setIsGovSyncRunning(true);
     setGovSyncStatus('Analyse en cours des sites gouvernementaux (CIOSPB, FOSER)...');
+    console.log("Starting government sync...");
     try {
       const results = await governmentGatheringService.gatherAll();
+      console.log("Government sync results:", results);
       if (results) {
         setGovSyncResult(results);
         setGovSyncStatus('Synchronisation terminée avec succès.');
@@ -547,46 +600,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
     }
   };
 
-  const handleCareerSync = async () => {
-    setIsCareerSyncRunning(true);
-    setCareerSyncStatus('Analyse en cours des sites de la fonction publique et sociétés d\'État...');
-    try {
-      const results = await careerGatheringService.crawlOpportunities();
-      setCareerSyncResult(results);
-      setCareerSyncStatus(`Synchronisation terminée. ${results.added} opportunités ajoutées.`);
-      if (results.added > 0) {
-        await notificationService.sendNotification({
-          title: "Nouveaux concours et recrutements d'État !",
-          message: `${results.added} nouvelles opportunités ont été publiées sur la plateforme.`,
-          category: 'system',
-          target: 'all',
-          link: 'dashboard'
-        });
-      }
-    } catch (error: any) {
-      console.error(error);
-      setCareerSyncStatus(`Erreur de synchronisation: ${error.message}`);
-    } finally {
-      setIsCareerSyncRunning(false);
-    }
-  };
 
-  const handleDeleteCareer = (id: string) => {
-    setConfirmDialog({
-      message: 'Êtes-vous sûr de vouloir supprimer ce concours ?',
-      onConfirm: async () => {
-        try {
-          await careerGatheringService.deleteOpportunity(id);
-          setCareersList(careersList.filter(c => c.id !== id));
-          setNotification({ message: 'Concours supprimé', type: 'success' });
-        } catch (e) {
-          setNotification({ message: 'Erreur lors de la suppression', type: 'error' });
-        } finally {
-          setConfirmDialog(null);
-        }
-      }
-    });
-  };
 
   const handleCleanDuplicates = async () => {
     setConfirmDialog({
@@ -659,6 +673,9 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
       console.error(e);
       if (e.message && e.message.includes('Quota')) {
         setIntelStatus("Erreur : Quota Gemini dépassé. Veuillez réessayer demain.");
+      } else if (e.message && e.message.includes('GEMINI_API_KEY')) {
+        setIntelStatus("Erreur : Clé API Gemini manquante. Configurez la dans l'onglet Settings > Secrets.");
+        setNotification({ message: 'Clé API Gemini introuvable. Allez dans Settings > Secrets.', type: 'error' });
       } else {
         setIntelStatus(`Erreur lors de l'analyse : ${e.message || 'Erreur critique.'}`);
       }
@@ -790,7 +807,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
     id: user.paymentTransactionId || `PAY-${1000 + (typeof user.id === 'string' ? parseInt(user.id) || 0 : user.id)}`,
     userId: user.id,
     userName: user.name,
-    amount: 2000,
+    amount: 1000,
     date: user.paymentDate ? user.paymentDate.split('T')[0] : user.date,
     status: user.paymentStatus === 'validated' ? 'Completed' : (user.paymentStatus === 'pending' ? 'Pending' : 'No Payment'),
     method: user.paymentMethod ? (user.paymentMethod === 'orange' ? 'Orange Money' : user.paymentMethod === 'moov' ? 'Moov Money' : 'Telecel Money') : (user.hasPaid ? 'Divers' : '-')
@@ -1285,7 +1302,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   };
 
   return (
-    <div className="container mx-auto px-4 py-12 relative">
+    <div className="w-full px-6 py-12 relative">
       <div className="flex flex-col md:flex-row gap-4 mb-8 items-center justify-between">
         <div className="flex items-center gap-4">
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">Console Admin</h2>
@@ -1329,7 +1346,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
             <div>
               <div className="text-sm text-slate-500">Revenus (Est.)</div>
               <div className="text-2xl font-bold text-slate-900">
-                {users.filter(u => u.hasPaid).length * 2000} FCFA
+                {users.filter(u => u.hasPaid).length * 1000} FCFA
               </div>
             </div>
           </div>
@@ -1453,14 +1470,35 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
               Sync Gouv
             </button>
             <button
-              onClick={() => setActiveTab('careers')}
+              onClick={() => setActiveTab('concours')}
               className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
-                activeTab === 'careers' 
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' 
+                activeTab === 'concours' 
+                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' 
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              Concours d'État
+              Concours de la fonction publique
+            </button>
+
+            <button
+              onClick={() => setActiveTab('deduplication')}
+              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
+                activeTab === 'deduplication' 
+                  ? 'bg-pink-600 text-white shadow-lg shadow-pink-200' 
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Dédoublonnage
+            </button>
+            <button
+              onClick={() => setActiveTab('links')}
+              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
+                activeTab === 'links' 
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' 
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Liens Utiles
             </button>
           </div>
           
@@ -1620,7 +1658,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
         </div>
 
         <div className="overflow-x-auto">
-          {activeTab === 'intelligence' ? (
+          {activeTab === 'intelligence' && (
             <div className="p-8 max-w-4xl mx-auto">
               <div className="bg-purple-50 border border-purple-100 rounded-3xl p-8 mb-8">
                 <div className="flex items-center gap-4 mb-6">
@@ -1745,8 +1783,9 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                 </div>
               </div>
             </div>
-          ) : activeTab === 'gov_sync' ? (
-            <div className="p-8 max-w-4xl mx-auto">
+          )}
+          {activeTab === 'gov_sync' && (
+            <div className="p-8 w-full">
               <div className="bg-red-50 border border-red-100 rounded-3xl p-8 mb-8">
                 <div className="flex items-center gap-4 mb-6">
                   <div className="p-3 bg-red-600 text-white rounded-2xl shadow-lg">
@@ -1825,323 +1864,235 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                   </div>
                 )}
               </div>
-
-              {/* Nouveau Bloc : Concours de la Fonction Publique */}
-              <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-8">
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-lg">
-                    <Briefcase className={`w-8 h-8 ${isCareerSyncRunning ? 'animate-bounce' : ''}`} />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Concours & Opportunités d'État</h3>
-                    <p className="text-sm text-slate-500 font-medium">Récupérez les derniers concours de la Fonction publique et recrutements.</p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-6">
-                  <button
-                    onClick={handleCareerSync}
-                    disabled={isCareerSyncRunning}
-                    className="w-full bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-slate-900 transition-all shadow-xl shadow-emerald-600/20 disabled:opacity-50 flex items-center justify-center gap-3"
-                  >
-                    {isCareerSyncRunning ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Search className="w-5 h-5" />
-                    )}
-                    Rechercher les opportunités
-                  </button>
-                </div>
-
-                {careerSyncStatus && (
-                  <div className="mt-6 p-4 bg-white/50 rounded-xl border border-emerald-100 flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${isCareerSyncRunning ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-                    <span className="text-sm font-bold text-slate-700">{careerSyncStatus}</span>
-                  </div>
-                )}
-
-                {careerSyncResult && (
-                  <div className="mt-6 grid grid-cols-1 gap-4">
-                    <div className="p-4 bg-emerald-100 rounded-2xl border border-emerald-200 text-center">
-                      <div className="text-2xl font-black text-emerald-700">{careerSyncResult.added}</div>
-                      <div className="text-[10px] font-black uppercase text-emerald-800">Concours / Offres Récemment Ajoutés</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
             </div>
-          ) : activeTab === 'careers' ? (
+          )}
+          {activeTab === 'users' && (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-100">
                   <tr>
-                    <th className="px-6 py-4">Titre / Poste</th>
-                    <th className="px-6 py-4">Organisation</th>
-                    <th className="px-6 py-4">Diplôme Requis</th>
-                    <th className="px-6 py-4">Deadline</th>
+                    <th className="px-6 py-4">
+                      <input 
+                        type="checkbox" 
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        checked={paginatedUsers.length > 0 && selectedUserIds.length === paginatedUsers.length}
+                        onChange={toggleAllUsers}
+                      />
+                    </th>
+                    <th className="px-6 py-4">Nom</th>
+                    <th className="px-6 py-4">Email</th>
+                    <th className="px-6 py-4">Inscrit le</th>
+                    <th className="px-6 py-4">Connexion</th>
+                    <th className="px-6 py-4">Statut Compte</th>
+                    <th className="px-6 py-4">Statut Paiement</th>
+                    <th className="px-6 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedUsers.map((user) => (
+                    <tr key={user.id} className={`hover:bg-slate-50 transition-colors ${selectedUserIds.includes(user.id) ? 'bg-indigo-50/50' : ''}`}>
+                      <td className="px-6 py-4">
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          checked={selectedUserIds.includes(user.id)}
+                          onChange={() => toggleUserSelection(user.id)}
+                        />
+                      </td>
+                      <td 
+                        className="px-6 py-4 font-medium text-slate-900 cursor-pointer hover:text-indigo-600"
+                        onClick={() => setSelectedUser(user)}
+                      >
+                        {user.name}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600 truncate max-w-[150px]">{user.email}</td>
+                      <td className="px-6 py-4 text-slate-600">{user.date}</td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => toggleLoginStatus(user.id)}
+                          className={`p-1 rounded-lg transition-colors ${
+                            user.loginEnabled 
+                              ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' 
+                              : 'text-slate-400 bg-slate-50 hover:bg-slate-100'
+                          }`}
+                          title={user.loginEnabled ? "Désactiver la connexion" : "Activer la connexion"}
+                        >
+                          {user.loginEnabled ? (
+                            <ToggleRightIcon className="w-6 h-6" />
+                          ) : (
+                            <ToggleLeftIcon className="w-6 h-6" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4">
+                        <select
+                          value={user.status}
+                          onChange={(e) => updateUserStatus(user.id, e.target.value)}
+                          className={`text-xs font-medium px-2 py-1 rounded-lg border outline-none transition-all ${
+                            user.status === 'Actif'
+                              ? 'bg-green-50 border-green-100 text-green-700 focus:ring-green-200'
+                              : 'bg-amber-50 border-amber-100 text-amber-700 focus:ring-amber-200'
+                          }`}
+                        >
+                          <option value="Actif">Actif</option>
+                          <option value="En attente">En attente</option>
+                          <option value="Bloqué">Bloqué</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => togglePaymentStatus(typeof user.id === 'string' ? parseInt(user.id) : user.id)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                            user.hasPaid
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                          }`}
+                          title="Cliquez pour changer le statut"
+                        >
+                          {user.hasPaid ? (
+                            <>
+                              <CheckCircle className="w-3 h-3" /> Payé
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-3 h-3" /> En attente
+                            </>
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => handleDownloadAnalysis(user)}
+                            className={`p-2 rounded-lg transition-colors ${
+                              user.details.analysisResult 
+                                ? 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50' 
+                                : 'text-slate-200 cursor-not-allowed'
+                            }`}
+                            title="Télécharger le rapport d'analyse"
+                            disabled={!user.details.analysisResult}
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => setSelectedUser(user)}
+                            className="text-slate-400 hover:text-indigo-600 p-2 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="Voir détails"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="text-red-500 hover:text-red-700 font-medium p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Supprimer l'utilisateur"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {paginatedUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                        Aucun utilisateur trouvé
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {activeTab === 'payments' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-100">
+                  <tr>
+                    <th className="px-6 py-4">ID Transaction</th>
+                    <th className="px-6 py-4">Utilisateur</th>
+                    <th className="px-6 py-4">Montant</th>
+                    <th className="px-6 py-4">Date</th>
+                    <th className="px-6 py-4">Méthode</th>
                     <th className="px-6 py-4">Statut</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {loadingCareers ? (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-500" />
-                        Chargement des opportunités...
+                  {paginatedPayments.map((payment) => (
+                    <tr key={payment.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 font-mono text-xs text-slate-500">{payment.id}</td>
+                      <td className="px-6 py-4 font-medium text-slate-900">{payment.userName}</td>
+                      <td className="px-6 py-4 text-slate-900 font-medium">{payment.amount} FCFA</td>
+                      <td className="px-6 py-4 text-slate-600">{payment.date}</td>
+                      <td className="px-6 py-4 text-slate-600">{payment.method}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          payment.status === 'Completed'
+                            ? 'bg-green-100 text-green-700'
+                            : payment.status === 'Pending'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {payment.status === 'Completed' ? 'Complété' : payment.status === 'Pending' ? 'En attente' : 'Aucun'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        {payment.status === 'Pending' && (
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => handleValidatePayment(payment.userId)}
+                              className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors"
+                              title="Valider le paiement"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleRejectPayment(payment.userId)}
+                              className="p-1.5 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors"
+                              title="Rejeter le paiement"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
-                  ) : careersList.length === 0 ? (
+                  ))}
+                  {paginatedPayments.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500 font-medium">
-                        Aucun concours trouvé. Lancez une synchronisation.
+                      <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                        Aucun paiement trouvé
                       </td>
                     </tr>
-                  ) : (
-                    careersList.map(opp => (
-                      <tr key={opp.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4 font-semibold text-slate-900">{opp.title}</td>
-                        <td className="px-6 py-4 text-slate-600">{opp.organization}</td>
-                        <td className="px-6 py-4 text-slate-600">{opp.requiredDegree}</td>
-                        <td className="px-6 py-4 text-slate-600">{opp.deadline}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 rounded text-xs font-bold ${
-                            opp.status === 'ouvert' ? 'bg-emerald-100 text-emerald-700' :
-                            opp.status === 'bientôt ouvert' ? 'bg-amber-100 text-amber-700' :
-                            'bg-slate-100 text-slate-600'
-                          }`}>
-                            {opp.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button
-                            onClick={() => handleDeleteCareer(opp.id)}
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Supprimer"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
                   )}
                 </tbody>
               </table>
             </div>
-          ) : activeTab === 'users' ? (
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-100">
-                <tr>
-                  <th className="px-6 py-4">
-                    <input 
-                      type="checkbox" 
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      checked={paginatedUsers.length > 0 && selectedUserIds.length === paginatedUsers.length}
-                      onChange={toggleAllUsers}
-                    />
-                  </th>
-                  <th className="px-6 py-4">Nom</th>
-                  <th className="px-6 py-4">Email</th>
-                  <th className="px-6 py-4">Inscrit le</th>
-                  <th className="px-6 py-4">Connexion</th>
-                  <th className="px-6 py-4">Statut Compte</th>
-                  <th className="px-6 py-4">Statut Paiement</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paginatedUsers.map((user) => (
-                  <tr key={user.id} className={`hover:bg-slate-50 transition-colors ${selectedUserIds.includes(user.id) ? 'bg-indigo-50/50' : ''}`}>
-                    <td className="px-6 py-4">
-                      <input 
-                        type="checkbox" 
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                        checked={selectedUserIds.includes(user.id)}
-                        onChange={() => toggleUserSelection(user.id)}
-                      />
-                    </td>
-                    <td 
-                      className="px-6 py-4 font-medium text-slate-900 cursor-pointer hover:text-indigo-600"
-                      onClick={() => setSelectedUser(user)}
-                    >
-                      {user.name}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 truncate max-w-[150px]">{user.email}</td>
-                    <td className="px-6 py-4 text-slate-600">{user.date}</td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => toggleLoginStatus(user.id)}
-                        className={`p-1 rounded-lg transition-colors ${
-                          user.loginEnabled 
-                            ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' 
-                            : 'text-slate-400 bg-slate-50 hover:bg-slate-100'
-                        }`}
-                        title={user.loginEnabled ? "Désactiver la connexion" : "Activer la connexion"}
-                      >
-                        {user.loginEnabled ? (
-                          <ToggleRightIcon className="w-6 h-6" />
-                        ) : (
-                          <ToggleLeftIcon className="w-6 h-6" />
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4">
-                      <select
-                        value={user.status}
-                        onChange={(e) => updateUserStatus(user.id, e.target.value)}
-                        className={`text-xs font-medium px-2 py-1 rounded-lg border outline-none transition-all ${
-                          user.status === 'Actif'
-                            ? 'bg-green-50 border-green-100 text-green-700 focus:ring-green-200'
-                            : 'bg-amber-50 border-amber-100 text-amber-700 focus:ring-amber-200'
-                        }`}
-                      >
-                        <option value="Actif">Actif</option>
-                        <option value="En attente">En attente</option>
-                        <option value="Bloqué">Bloqué</option>
-                      </select>
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => togglePaymentStatus(typeof user.id === 'string' ? parseInt(user.id) : user.id)}
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
-                          user.hasPaid
-                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                            : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                        }`}
-                        title="Cliquez pour changer le statut"
-                      >
-                        {user.hasPaid ? (
-                          <>
-                            <CheckCircle className="w-3 h-3" /> Payé
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-3 h-3" /> En attente
-                          </>
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => handleDownloadAnalysis(user)}
-                          className={`p-2 rounded-lg transition-colors ${
-                            user.details.analysisResult 
-                              ? 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50' 
-                              : 'text-slate-200 cursor-not-allowed'
-                          }`}
-                          title="Télécharger le rapport d'analyse"
-                          disabled={!user.details.analysisResult}
-                        >
-                          <FileText className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => setSelectedUser(user)}
-                          className="text-slate-400 hover:text-indigo-600 p-2 hover:bg-indigo-50 rounded-lg transition-colors"
-                          title="Voir détails"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="text-red-500 hover:text-red-700 font-medium p-2 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Supprimer l'utilisateur"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {paginatedUsers.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                      Aucun utilisateur trouvé
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-100">
-                <tr>
-                  <th className="px-6 py-4">ID Transaction</th>
-                  <th className="px-6 py-4">Utilisateur</th>
-                  <th className="px-6 py-4">Montant</th>
-                  <th className="px-6 py-4">Date</th>
-                  <th className="px-6 py-4">Méthode</th>
-                  <th className="px-6 py-4">Statut</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paginatedPayments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-mono text-xs text-slate-500">{payment.id}</td>
-                    <td className="px-6 py-4 font-medium text-slate-900">{payment.userName}</td>
-                    <td className="px-6 py-4 text-slate-900 font-medium">{payment.amount} FCFA</td>
-                    <td className="px-6 py-4 text-slate-600">{payment.date}</td>
-                    <td className="px-6 py-4 text-slate-600">{payment.method}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        payment.status === 'Completed'
-                          ? 'bg-green-100 text-green-700'
-                          : payment.status === 'Pending'
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-slate-100 text-slate-500'
-                      }`}>
-                        {payment.status === 'Completed' ? 'Complété' : payment.status === 'Pending' ? 'En attente' : 'Aucun'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {payment.status === 'Pending' && (
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => handleValidatePayment(payment.userId)}
-                            className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors"
-                            title="Valider le paiement"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleRejectPayment(payment.userId)}
-                            className="p-1.5 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors"
-                            title="Rejeter le paiement"
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {paginatedPayments.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                      Aucun paiement trouvé
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          )}
+          
+          {activeTab === 'deduplication' && (
+            <DeduplicationPanel />
+          )}
+
+          {activeTab === 'links' && (
+            <UsefulLinksPanel isAdmin={true} />
           )}
 
           {activeTab === 'institutions' && (
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                  <th className="px-6 py-4 rounded-tl-lg">École</th>
-                  <th className="px-6 py-4">Type</th>
-                  <th className="px-6 py-4">Pays</th>
-                  <th className="px-6 py-4">Ville</th>
-                  <th className="px-6 py-4">Filières</th>
-                  <th className="px-6 py-4">Statut</th>
-                  <th className="px-6 py-4 rounded-tr-lg">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                      <th className="px-6 py-4 rounded-tl-lg">École</th>
+                      <th className="px-6 py-4">Type</th>
+                      <th className="px-6 py-4">Pays</th>
+                      <th className="px-6 py-4">Ville</th>
+                      <th className="px-6 py-4">Filières</th>
+                      <th className="px-6 py-4">Statut</th>
+                      <th className="px-6 py-4 rounded-tr-lg">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
                 {[...institutions, ...mockInstitutions.filter(mi => !institutions.some(ri => ri.name === mi.name))].map((inst) => (
                   <tr key={inst.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
@@ -2171,7 +2122,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <button className="text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded transition-colors text-sm font-medium border border-indigo-200">
+                      <button 
+                        onClick={() => alert(`Gestion de ${inst.name}`)}
+                        className="text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded transition-colors text-sm font-medium border border-indigo-200"
+                      >
                         Gérer
                       </button>
                     </td>
@@ -2179,6 +2133,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                 ))}
               </tbody>
             </table>
+          </div>
           )}
 
           {activeTab === 'notifications' && (
@@ -2255,45 +2210,218 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                </form>
             </div>
           )}
+
+          {activeTab === 'concours' && (
+            <div className="p-8 w-full">
+              {/* Automatic Search & Scraping Config */}
+              <div className="bg-amber-50 border border-amber-100 rounded-3xl p-8 mb-8">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-lg">
+                      <Briefcase className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-slate-900 tracking-tight">Recherche automatique de concours</h3>
+                      <p className="text-sm text-slate-500 font-medium">Scrape automatique de la fonction publique via le portail gouvernemental burkinabè.</p>
+                      <p className="text-xs text-slate-400 font-mono mt-1">Source cible : https://www.econcours.gov.bf/categorie-concours</p>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={handleConcoursCrawl}
+                    disabled={isCrawlingConcours}
+                    className="bg-slate-900 hover:bg-amber-600 text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-xl disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isCrawlingConcours ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Recherche en cours...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4" />
+                        Lancer la recherche automatique
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {concoursCrawlStatus && (
+                  <div className="p-4 bg-white rounded-xl border border-amber-100 flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${isCrawlingConcours ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+                    <span className="text-sm font-semibold text-slate-700">{concoursCrawlStatus}</span>
+                  </div>
+                )}
+
+                {concoursCrawlResult && (
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-center">
+                      <div className="text-2xl font-black text-emerald-600 font-sans">+{concoursCrawlResult.added}</div>
+                      <div className="text-[10px] font-black uppercase text-emerald-700">Nouveaux Concours</div>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 text-center">
+                      <div className="text-2xl font-black text-blue-600 font-sans">{concoursCrawlResult.updated}</div>
+                      <div className="text-[10px] font-black uppercase text-blue-700">Mises à Jour</div>
+                    </div>
+                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 text-center">
+                      <div className="text-2xl font-black text-amber-700 font-sans">{concoursCrawlResult.error ? '1' : '0'}</div>
+                      <div className="text-[10px] font-black uppercase text-amber-700">Statut Erreur</div>
+                    </div>
+                  </div>
+                )}
+                
+                {concoursCrawlResult?.error && (
+                  <div className="mt-4 p-4 bg-red-50 rounded-xl border border-red-100 text-red-600 text-xs">
+                    Impossible de se connecter à eConcours. Détails : {concoursCrawlResult.error}
+                  </div>
+                )}
+              </div>
+
+              {/* Indexed Concours list title and search */}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+                <div>
+                  <h4 className="text-lg font-black text-slate-800 uppercase tracking-wider font-sans">Concours d'État indexés ({concoursList.length})</h4>
+                  <p className="text-xs text-slate-400">Liste des concours publics burkinabè persistés en base de données.</p>
+                </div>
+                
+                <div className="w-full sm:w-72 relative">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                    <Search className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Filtrer par titre ou ministère..."
+                    value={concoursSearchTerm}
+                    onChange={(e) => setConcoursSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50 focus:bg-white transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Responsive table for current concours */}
+              {loadingConcours ? (
+                <div className="py-20 text-center text-slate-400">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-slate-300" />
+                  Chargement des concours publics...
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-3xl border border-slate-100 shadow-sm bg-white">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider text-[10px] border-b border-slate-100 font-sans">
+                      <tr>
+                        <th className="px-6 py-4">Titre / Intitulé</th>
+                        <th className="px-6 py-4">Ministère / Organisation</th>
+                        <th className="px-6 py-4">Niveau / Diplôme</th>
+                        <th className="px-6 py-4">Date Limite</th>
+                        <th className="px-6 py-4">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {concoursList
+                        .filter(item => 
+                          item.title.toLowerCase().includes(concoursSearchTerm.toLowerCase()) ||
+                          item.organization.toLowerCase().includes(concoursSearchTerm.toLowerCase())
+                        )
+                        .map((item) => (
+                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="font-bold text-slate-900 line-clamp-2">{item.title}</div>
+                              <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1.5 mt-1">
+                                <Globe className="w-3 h-3" /> {item.officialUrl ? 'eConcours Officiel' : 'Saisie Manuelle'}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-xs font-semibold text-slate-600">
+                              {item.organization}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="px-2 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold border border-amber-100">
+                                {item.eligibility}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-xs font-medium text-slate-500">
+                              {item.deadline}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                {item.officialUrl && (
+                                  <a
+                                    href={item.officialUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 border border-slate-200 transition-all text-xs"
+                                    title="Voir l'annonce officielle"
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                  </a>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteConcours(item.id, item.title)}
+                                  className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg border border-red-100 transition-all text-xs"
+                                  title="Supprimer de la plateforme"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      {concoursList.filter(item => 
+                        item.title.toLowerCase().includes(concoursSearchTerm.toLowerCase()) ||
+                        item.organization.toLowerCase().includes(concoursSearchTerm.toLowerCase())
+                      ).length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                            Aucun concours correspondant trouvé. Utilisez la recherche automatique ci-dessus pour rapatrier les derniers concours d'État !
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Pagination Controls */}
-        <div className="px-6 py-4 border-t border-slate-100 flex justify-between items-center bg-slate-50">
-          <div className="text-sm text-slate-500">
-            Affichage de {activeTab === 'users' ? paginatedUsers.length : paginatedPayments.length} sur {activeTab === 'users' ? filteredUsers.length : filteredPayments.length} résultats
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1 rounded border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Précédent
-            </button>
-            <div className="flex gap-1">
-              {Array.from({ length: activeTab === 'users' ? totalPages : paymentPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                    currentPage === page
-                      ? 'bg-indigo-600 text-white'
-                      : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
+        {(activeTab === 'users' || activeTab === 'payments') && (
+          <div className="px-6 py-4 border-t border-slate-100 flex justify-between items-center bg-slate-50">
+            <div className="text-sm text-slate-500">
+              Affichage de {activeTab === 'users' ? paginatedUsers.length : paginatedPayments.length} sur {activeTab === 'users' ? filteredUsers.length : filteredPayments.length} résultats
             </div>
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, activeTab === 'users' ? totalPages : paymentPages))}
-              disabled={currentPage === (activeTab === 'users' ? totalPages : paymentPages) || (activeTab === 'users' ? totalPages : paymentPages) === 0}
-              className="px-3 py-1 rounded border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Suivant
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 rounded border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Précédent
+              </button>
+              <div className="flex gap-1">
+                {Array.from({ length: activeTab === 'users' ? totalPages : paymentPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                      currentPage === page
+                        ? 'bg-indigo-600 text-white'
+                        : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, activeTab === 'users' ? totalPages : paymentPages))}
+                disabled={currentPage === (activeTab === 'users' ? totalPages : paymentPages) || (activeTab === 'users' ? totalPages : paymentPages) === 0}
+                className="px-3 py-1 rounded border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Suivant
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Add User Modal */}
@@ -2377,7 +2505,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                   className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 />
                 <label htmlFor="hasPaid" className="text-sm font-medium text-slate-700">
-                  A déjà payé (2000 FCFA)
+                  A déjà payé (1000 FCFA)
                 </label>
               </div>
               <div className="flex items-center gap-2">
