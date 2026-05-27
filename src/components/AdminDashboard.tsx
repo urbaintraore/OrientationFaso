@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Users, CreditCard, CheckCircle, XCircle, Search, Trash2, Plus, X, Eye, GraduationCap, School, Calendar, Filter, Download, FileText, TrendingUp, AlertTriangle, ToggleLeft as ToggleLeftIcon, ToggleRight as ToggleRightIcon, Loader2, RefreshCw, Zap, Sparkles, Building2, Bell, ShieldCheck, AlertCircle, Globe, Briefcase, ExternalLink } from 'lucide-react';
+import { Users, CreditCard, CheckCircle, XCircle, Search, Trash2, Plus, X, Eye, GraduationCap, School, Calendar, Filter, Download, FileText, TrendingUp, AlertTriangle, ToggleLeft as ToggleLeftIcon, ToggleRight as ToggleRightIcon, Loader2, RefreshCw, Zap, Sparkles, Building2, Bell, ShieldCheck, AlertCircle, Globe, Briefcase, ExternalLink, PieChart as PieChartIcon } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AnalysisResult, UniversityAnalysisResult, GovernmentOpportunity } from '../types';
 import { mockInstitutions } from '../data/mockInstitutions';
 import { jsPDF } from 'jspdf';
@@ -2065,9 +2066,85 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
             </div>
           )}
           {activeTab === 'users' && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-100">
+            <div className="space-y-6">
+              {/* Statistiques Nationales - Pie Chart */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200">
+                <div className="flex items-center gap-3 mb-6">
+                  <PieChartIcon className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-lg font-bold text-slate-900">Statistiques Nationales : Répartition par Série</h3>
+                </div>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={(function() {
+                          const seriesCounts: Record<string, number> = {};
+                          users.forEach(u => {
+                            let series = 'Autre/Non Spécifié';
+                            const lvl = u.details.level || '';
+                            const bacSeries = u.details.bac?.series;
+                            
+                            if (lvl.includes('A4') || bacSeries === 'A4') series = 'Série A4';
+                            else if (lvl.includes('D') || bacSeries === 'D') series = 'Série D';
+                            else if (lvl.includes('C') || bacSeries === 'C') series = 'Série C';
+                            else if (lvl.includes('G2') || bacSeries === 'G2') series = 'Série G2';
+                            else if (lvl.includes('A') || bacSeries === 'A') series = 'Série A';
+                            else if (lvl.includes('E') || bacSeries === 'E') series = 'Série E';
+                            else if (lvl.includes('Terminale') || lvl.includes('Première')) series = 'Autre Série';
+                            
+                            seriesCounts[series] = (seriesCounts[series] || 0) + 1;
+                          });
+                          return Object.entries(seriesCounts).map(([name, value]) => ({ name, value })).filter(item => item.value > 0).sort((a,b) => b.value - a.value);
+                        })()}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {
+                          (function() {
+                            const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f43f5e', '#64748b'];
+                            // Assume maximum 8 different categories for mapping array
+                            return Array.from({length: 8}).map((_, index) => <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />);
+                          })()
+                        }
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [`${value} Élèves`, 'Effectif']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex flex-wrap justify-center gap-4 mt-2">
+                  {(function() {
+                    const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f43f5e', '#64748b'];
+                    const seriesCounts: Record<string, number> = {};
+                    users.forEach(u => {
+                      let series = 'Autre/Non Spécifié';
+                      const lvl = u.details.level || '';
+                      const bacSeries = u.details.bac?.series;
+                      if (lvl.includes('A4') || bacSeries === 'A4') series = 'Série A4';
+                      else if (lvl.includes('D') || bacSeries === 'D') series = 'Série D';
+                      else if (lvl.includes('C') || bacSeries === 'C') series = 'Série C';
+                      else if (lvl.includes('G2') || bacSeries === 'G2') series = 'Série G2';
+                      else if (lvl.includes('A') || bacSeries === 'A') series = 'Série A';
+                      else if (lvl.includes('E') || bacSeries === 'E') series = 'Série E';
+                      else if (lvl.includes('Terminale') || lvl.includes('Première')) series = 'Autre Série';
+                      seriesCounts[series] = (seriesCounts[series] || 0) + 1;
+                    });
+                    return Object.entries(seriesCounts).map(([name, value]) => ({ name, value })).filter(item => item.value > 0).sort((a,b) => b.value - a.value).map((item, index) => (
+                      <div key={item.name} className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[index % colors.length] }}></div>
+                        <span className="text-xs font-medium text-slate-600">{item.name} ({item.value})</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-100">
                   <tr>
                     <th className="px-6 py-4">
                       <input 
@@ -2199,6 +2276,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                   )}
                 </tbody>
               </table>
+            </div>
             </div>
           )}
           {activeTab === 'payments' && (

@@ -536,8 +536,9 @@ export async function analyzePostBacProfile(profile: PostBacProfile, dbCareersCo
     - Bachelier: ${calc.name} (Série BAC : ${profile.bacSeries})
     - Moyenne générale obtenue au BAC : ${calc.globalAverage.toFixed(2)}/20
     - Note de Mathématiques calculée (historique + examen) : ${calc.mathAverage.toFixed(2)}/20 (Matière principale d'ingénierie)
-    - Note de Physique-Chimie (historique + examen, inclut la Chimie) : ${calc.pcAverage.toFixed(2)}/20 (Matière technique d'ingénierie et de bio-chimie)
-    - Note de SVT/Biologique (historique + examen) : ${calc.biologyAverage.toFixed(2)}/20 (Matière médicale et agronomique)
+    - Note de Physique calculée (historique + examen) : ${calc.physicsAverage.toFixed(2)}/20 (Mécanique, résistance, ingénierie)
+    - Note de Chimie calculée (historique + examen) : ${calc.chemistryAverage.toFixed(2)}/20 (Santé, agronomie, pharmacologie)
+    - Note de SVT/Biologique calculée (historique + examen) : ${calc.biologyAverage.toFixed(2)}/20 (Matière médicale et agronomique)
     - Profil scolaire dominant mesuré : ${calc.dominantProfile}
     - Forces : ${calc.strengths.join(', ') || "Aucun point fort exceptionnel"}
     - Faiblesses : ${calc.weaknesses.join(', ') || "Aucune faiblesse majeure"}

@@ -1,6 +1,5 @@
-import { StudentProfile, PostBacProfile, GradeEntry, YearGrades, AnalysisResult, UniversityAnalysisResult, CareerOpportunity } from "../types";
+import { StudentProfile, PostBacProfile, GradeEntry, YearGrades } from "../types";
 
-// Types defining pedagogical matching structures
 export interface CalculatedProfile {
   name: string;
   globalAverage: number;
@@ -34,7 +33,7 @@ export interface CompatibilityReport {
 /**
  * Normalizes lists of grades to easily query subject averages
  */
-function getSubjectScore(grades: GradeEntry[], subject: string, fallback = 10): number {
+export function getSubjectScore(grades: GradeEntry[], subject: string, fallback = 10): number {
   const normSubject = subject.toLowerCase().trim();
   
   if (normSubject === 'physique-chimie') {
@@ -60,14 +59,12 @@ function getSubjectScore(grades: GradeEntry[], subject: string, fallback = 10): 
   if (normSubject === 'physique') {
     const physEntry = grades.find(g => g.subject.toLowerCase().trim() === 'physique');
     if (physEntry) return physEntry.grade;
-    // Fallback to general PC if specific physics not found
     return getSubjectScore(grades, 'physique-chimie', fallback);
   }
 
   if (normSubject === 'chimie') {
     const chimEntry = grades.find(g => g.subject.toLowerCase().trim() === 'chimie');
     if (chimEntry) return chimEntry.grade;
-    // Fallback to general PC if specific chemistry not found
     return getSubjectScore(grades, 'physique-chimie', fallback);
   }
 
@@ -84,7 +81,7 @@ function getSubjectScore(grades: GradeEntry[], subject: string, fallback = 10): 
 /**
  * Computes average grade in any subject across all years in the student's history
  */
-function getSubjectHistoricalAverage(gradesHistory: YearGrades[], subject: string, fallbackGrade = 10): number {
+export function getSubjectHistoricalAverage(gradesHistory: YearGrades[], subject: string, fallbackGrade = 10): number {
   if (!gradesHistory || gradesHistory.length === 0) return fallbackGrade;
   let sum = 0;
   let count = 0;
@@ -99,12 +96,11 @@ function getSubjectHistoricalAverage(gradesHistory: YearGrades[], subject: strin
 }
 
 /**
- * Calculates notes trend (slope) from 2nd, 1er, the terminal or 6ème to 3ème in years
+ * Calculates notes trend from 2nd, 1er, the terminal or 6ème to 3ème in years
  */
 function calculateTrend(gradesHistory: YearGrades[], subjectFilter: 'global' | 'scientific' | 'literary'): 'en hausse' | 'en baisse' | 'stable' | 'irrégulier' {
   if (!gradesHistory || gradesHistory.length < 2) return 'stable';
   
-  // Sort from most ancient to most recent
   const sortedYears = [...gradesHistory].sort((a, b) => {
     const levelsMap: Record<string, number> = {
       '6ème': 1, '5ème': 2, '4ème': 3, '3ème': 4,
@@ -157,7 +153,6 @@ export function calculateAcademicProfile(
   examGrades: GradeEntry[],
   examAverage: number
 ): CalculatedProfile {
-  // Aggregate grades list
   const allRecentGrades = examGrades && examGrades.length > 0 ? examGrades : (gradesHistory && gradesHistory.length > 0 ? gradesHistory[gradesHistory.length - 1].grades : []);
   
   const math = getSubjectScore(allRecentGrades, 'Mathématiques', getSubjectHistoricalAverage(gradesHistory, 'Mathématiques', 10));
@@ -169,8 +164,6 @@ export function calculateAcademicProfile(
   const ang = getSubjectScore(allRecentGrades, 'Anglais', getSubjectHistoricalAverage(gradesHistory, 'Anglais', 10));
   const hg = getSubjectScore(allRecentGrades, 'Histoire-Géo', getSubjectHistoricalAverage(gradesHistory, 'Histoire-Géo', 10));
   const philo = getSubjectScore(allRecentGrades, 'Philosophie', getSubjectHistoricalAverage(gradesHistory, 'Philosophie', 10));
-  const delem = getSubjectScore(allRecentGrades, 'Allemand', getSubjectHistoricalAverage(gradesHistory, 'Allemand', 10));
-  const esp = getSubjectScore(allRecentGrades, 'Espagnol', getSubjectHistoricalAverage(gradesHistory, 'Espagnol', 10));
 
   const mathHist = getSubjectHistoricalAverage(gradesHistory, 'Mathématiques', math);
   const pcHist = getSubjectHistoricalAverage(gradesHistory, 'Physique-Chimie', pc);
@@ -180,7 +173,6 @@ export function calculateAcademicProfile(
   const frHist = getSubjectHistoricalAverage(gradesHistory, 'Français', fr);
   const angHist = getSubjectHistoricalAverage(gradesHistory, 'Anglais', ang);
   
-  // Weights the calculations
   const mathAverage = (math * 0.6) + (mathHist * 0.4);
   const pcAverage = (pc * 0.6) + (pcHist * 0.4);
   const physicsAverage = (physics * 0.6) + (physicsHist * 0.4);
@@ -193,7 +185,6 @@ export function calculateAcademicProfile(
   const literaryAverage = (frenchAverage + englishAverage + hg + (philo > 5 ? philo : 10)) / 4;
   const managementAverage = (mathAverage + frenchAverage + hg) / 3;
 
-  // Dominant profiling
   let dominantProfile: CalculatedProfile['dominantProfile'] = 'Général';
   const threshold = 10;
 
@@ -212,7 +203,6 @@ export function calculateAcademicProfile(
     dominantProfile = 'Équilibré';
   }
 
-  // Strengths and weaknesses extraction
   const strengths: string[] = [];
   const weaknesses: string[] = [];
 
@@ -467,9 +457,7 @@ export function evaluateBacOrientation(profile: PostBacProfile): CompatibilityRe
 
   const reports: CompatibilityReport[] = [];
 
-  // Compute actual compatibility algorithms per major
   majorsDefinitions.forEach(major => {
-    // 1. Weighted base score
     let sumWeights = 0;
     let sumWeightedScores = 0;
     major.keySubjects.forEach(sub => {
@@ -477,16 +465,14 @@ export function evaluateBacOrientation(profile: PostBacProfile): CompatibilityRe
       sumWeights += sub.weight;
     });
 
-    let baseCompatScore = (sumWeightedScores / sumWeights) * 5; // Rescale 0-20 to 0-100
+    let baseCompatScore = (sumWeightedScores / sumWeights) * 5;
 
-    // 2. Adjust with profile suitability
     if (calc.dominantProfile === major.preferredProfile) {
-      baseCompatScore += 10; // Dominant profile bonus
+      baseCompatScore += 10;
     } else if (calc.dominantProfile === 'Équilibré') {
       baseCompatScore += 4;
     }
 
-    // 3. Strict logical penalty rules
     let appliedPenaltiesCount = 0;
     const penaltyExplanations: string[] = [];
     
@@ -498,10 +484,8 @@ export function evaluateBacOrientation(profile: PostBacProfile): CompatibilityRe
       }
     });
 
-    // Clamp score
     let finalScore = Math.max(5, Math.min(99, Math.round(baseCompatScore)));
 
-    // 4. Suitability brackets based strictly on final score and penalty flags
     let suitability: CompatibilityReport['suitability'] = 'Moyenne';
     if (finalScore >= 82) {
       suitability = 'Excellente';
@@ -515,16 +499,13 @@ export function evaluateBacOrientation(profile: PostBacProfile): CompatibilityRe
       suitability = 'Fortement Déconseillée';
     }
 
-    // Force lower suitability or bracket if primary subject is heavily failing
     if (appliedPenaltiesCount >= 2 || finalScore < 30) {
       suitability = finalScore < 20 ? 'Fortement Déconseillée' : 'Déconseillée';
     }
 
-    // Dominant grade reason description
     const primaryGrade = getSubjectScore(profile.bacGrades, major.primarySubject, 10);
     const dominantGradeReason = `Matière fondamentale: ${major.primarySubject} (${primaryGrade.toFixed(1)}/20). Moyenne Thématique: ${calc.dominantProfile}.`;
 
-    // Concat reasons
     let rawExplanation = major.explanationGenerator(finalScore);
     if (penaltyExplanations.length > 0) {
       rawExplanation += ` **Points d'alerte :** ${penaltyExplanations.join(' ')}`;
@@ -540,7 +521,6 @@ export function evaluateBacOrientation(profile: PostBacProfile): CompatibilityRe
     });
   });
 
-  // Sort major recommendations by key scientific scores first, and overall compatibility descending
   return reports.sort((a, b) => b.score - a.score);
 }
 
@@ -569,10 +549,10 @@ export function evaluateBepcOrientation(profile: StudentProfile): CompatibilityR
       ],
       minRequiredScore: 12.5,
       penaltyRules: [
-        { check: () => calc.mathAverage < 12.5, penalty: 40, reason: "La série C d'élite mathématique exige d'excellentes bases (recommandé >=13). Votre score actuel de Mathématiques (${calc.mathAverage.toFixed(1)}/20) vous placerait trop en difficulté." },
+        { check: () => calc.mathAverage < 12.5, penalty: 40, reason: `La série C exige d'excellentes bases (recommandé >=12.5). Votre score actuel de Mathématiques (${calc.mathAverage.toFixed(1)}/20) vous placerait en difficulté.` },
         { check: () => calc.mathAverage < 10, penalty: 60, reason: "Bases très insuffisantes en Mathématiques (<10/20) pour la série C." },
-        { check: () => calc.pcAverage < 11.5, penalty: 20, reason: "Faiblesse relative en Sciences Physiques indispensables à l'analyse algorithmique des sciences en Seconde C." },
-        { check: () => calc.pcAverage < 10, penalty: 40, reason: "Moyenne critique en Physique-Chimie (<10/20) inadéquate pour le rythme d'ingénierie scientifique de Seconde C." }
+        { check: () => calc.pcAverage < 11.5, penalty: 20, reason: "Faiblesse relative en Sciences Physiques indispensables en Seconde C." },
+        { check: () => calc.pcAverage < 10, penalty: 40, reason: "Moyenne critique en Physique-Chimie (<10/20) inadéquate pour le rythme de Seconde C." }
       ],
       explanationGenerator: (score: number) => {
         if (score >= 78) return `Profil de haut niveau scientifique. Votre moyenne en Mathématiques (${calc.mathAverage.toFixed(1)}/20) justifie pleinement une intégration en Seconde C pour préparer le BAC C d'ingénierie d'élite.`;
@@ -590,15 +570,15 @@ export function evaluateBepcOrientation(profile: StudentProfile): CompatibilityR
       ],
       minRequiredScore: 10.5,
       penaltyRules: [
-        { check: () => calc.biologyAverage < 10, penalty: 30, reason: "Bases en SVT insuffisantes pour entamer les études de biologie des sols et du corps humain de la série D." },
-        { check: () => calc.scienceAverage < 10, penalty: 30, reason: "Note scientifique globale critique. La Seconde S/D exige un niveau de rigueur dans l'hypothèse expérimentale." },
+        { check: () => calc.biologyAverage < 10, penalty: 30, reason: "Bases en SVT insuffisantes pour entamer les études de biologie de la série D." },
+        { check: () => calc.scienceAverage < 10, penalty: 30, reason: "Note scientifique globale critique ; la Seconde S/D exige un niveau de rigueur expérimental." },
         { check: () => calc.pcAverage < 10, penalty: 20, reason: "Fragilité en Physique-Chimie, matière clé d'évaluation en Seconde S/D." },
         { check: () => calc.mathAverage < 9, penalty: 25, reason: "Note de mathématiques trop basse (<9/20) pour supporter le rythme de calcul de la classe de Seconde S/D." }
       ],
       explanationGenerator: (score: number) => {
-        if (score >= 70) return `Filière scientifique équilibrée tout à fait propice face à votre profil expérimental. Excellente passerelle pour de futures études médicales, d'énergie, de gestion ou d'agronomie au Burkina Faso.`;
+        if (score >= 70) return `Filière scientifique équilibrée tout à fait propice face à votre profil expérimental. Excellente passerelle pour de futures études médicales, d'énergie, de gestion ou d'agronomie en série D.`;
         if (score >= 45) return `Admissible comme orientation, mais les bases mathématiques et de sciences physiques doivent être stabilisées dès le premier trimestre de Seconde.`;
-        return `Un redéploiement d'orientation est vivement recommandé en raison de la fragilité de vos matières de calculs et d'observation géologique/médicale.`;
+        return `Un redéploiement d'orientation est vivement recommandé en raison de la fragilité de vos matières de calculs et d'observation.`;
       }
     },
     {
@@ -606,16 +586,16 @@ export function evaluateBepcOrientation(profile: StudentProfile): CompatibilityR
       slug: "A4",
       keySubjects: [
         { name: "Français", weight: 5, score: calc.literaryAverage },
-        { name: "Anglais", weight: 4, score: calc.literaryAverage }, // Map support score
+        { name: "Anglais", weight: 4, score: calc.literaryAverage },
         { name: "Histoire-Géo", weight: 3, score: calc.literaryAverage }
       ],
       minRequiredScore: 10,
       penaltyRules: [
-        { check: () => getSubjectScore(profile.bepcGrades, 'Français', 10) < 10, penalty: 35, reason: "Faiblesse majeure en rédaction et dictée de Français. La série A4 nécessite une aisance rédactionnelle pointue pour préparer l'exercice de la dissertation d'histoire ou de philo." },
-        { check: () => calc.literaryAverage < 9.5, penalty: 20, reason: "Niveau général de culture littéraire et d'expression globale insuffisant pour s'orienter vers les lettres." }
+        { check: () => getSubjectScore(profile.bepcGrades, 'Français', 10) < 10, penalty: 35, reason: "Faiblesse majeure en rédaction et expression de Français. La série A4 nécessite une aisance rédactionnelle pour l'exercice de la dissertation d'histoire ou de philo." },
+        { check: () => calc.literaryAverage < 9.5, penalty: 20, reason: "Niveau général d'expression globale insuffisant pour s'orienter vers les lettres." }
       ],
       explanationGenerator: (score: number) => {
-        if (score >= 72) return `Aisance verbale excellente. Vos forces claires en expression française et langues étrangères vous assureront une scolarité gratifiante vers le BAC littéraire A4 ou les carrières d'enseignement, de traduction et de justice.`;
+        if (score >= 72) return `Aisance verbale excellente. Vos forces claires en expression française et langues étrangères vous assureront une scolarité gratifiante vers le BAC littéraire A4.`;
         return `Orientation réservée ou déconseillée car vos prédispositions actuelles s'illustrent plus favorablement dans les aspects techniques ou quantitatifs.`;
       }
     },
@@ -650,12 +630,10 @@ export function evaluateBepcOrientation(profile: StudentProfile): CompatibilityR
 
     let baseScore = (sumWeightedScores / sumWeights) * 5;
 
-    // Match focus preferences
     if (bepcPreferred === series.slug) {
       baseScore += 8;
     }
 
-    // Penalty check
     series.penaltyRules.forEach(rule => {
       if (rule.check()) {
         baseScore -= rule.penalty;

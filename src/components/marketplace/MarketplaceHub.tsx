@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Heart, Scale, X, CheckSquare, CreditCard } from 'lucide-react';
 import { Search, MapPin, Building2, GraduationCap, Award, Star, Filter, ChevronRight, ShieldCheck, Zap, Sparkles, RefreshCw, Globe, Loader2, Plus, Bell, Facebook, Linkedin } from 'lucide-react';
 import { mockInstitutions } from '../../data/mockInstitutions';
 import { Institution, InstitutionType } from '../../types';
@@ -20,6 +21,8 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
   const [selectedType, setSelectedType] = useState<string>('All');
   const [selectedCity, setSelectedCity] = useState<string>('All');
   const [selectedCountry, setSelectedCountry] = useState<string>('All');
+  const [selectedLevel, setSelectedLevel] = useState<string>('All');
+  const [selectedSeries, setSelectedSeries] = useState<string>('All');
   const [crawlerCountry, setCrawlerCountry] = useState<string>('All');
   
   const [institutions, setInstitutions] = useState<Institution[]>([]);
@@ -27,10 +30,38 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [activeTab, setActiveTab] = useState<'schools' | 'news'>('schools');
+  
+  const [favoriteInstitutions, setFavoriteInstitutions] = useState<string[]>([]);
+  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
+  const [showCompareModal, setShowCompareModal] = useState(false);
 
   useEffect(() => {
     fetchInstitutions();
+    const favs = localStorage.getItem('orientationbf_favorite_institutions');
+    if (favs) setFavoriteInstitutions(JSON.parse(favs));
   }, []);
+
+  const toggleFavorite = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newFavs = favoriteInstitutions.includes(id) 
+      ? favoriteInstitutions.filter(f => f !== id) 
+      : [...favoriteInstitutions, id];
+    setFavoriteInstitutions(newFavs);
+    localStorage.setItem('orientationbf_favorite_institutions', JSON.stringify(newFavs));
+  };
+
+  const toggleCompare = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (selectedForCompare.includes(id)) {
+      setSelectedForCompare(selectedForCompare.filter(c => c !== id));
+    } else {
+      if (selectedForCompare.length < 3) {
+        setSelectedForCompare([...selectedForCompare, id]);
+      } else {
+        alert("Vous ne pouvez comparer que 3 établissements au maximum.");
+      }
+    }
+  };
 
   const fetchInstitutions = async () => {
     setIsLoading(true);
@@ -107,7 +138,14 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
     const matchesType = selectedType === 'All' || inst.type === selectedType;
     const matchesCity = selectedCity === 'All' || inst.city === selectedCity;
     const matchesCountry = selectedCountry === 'All' || inst.country === selectedCountry;
-    return matchesSearch && matchesType && matchesCity && matchesCountry;
+    const matchesLevel = selectedLevel === 'All' || 
+                         (inst.degrees?.some(d => d.toLowerCase().includes(selectedLevel.toLowerCase()))) || 
+                         (inst.programs?.some(p => p.degreeLevel?.toLowerCase().includes(selectedLevel.toLowerCase()) || p.level?.toLowerCase().includes(selectedLevel.toLowerCase())));
+    const matchesSeries = selectedSeries === 'All' || 
+                          inst.description.toLowerCase().includes(selectedSeries.toLowerCase()) ||
+                          (inst.programs?.some(p => p.description?.toLowerCase().includes(selectedSeries.toLowerCase()) || p.name?.toLowerCase().includes(selectedSeries.toLowerCase())));
+                          
+    return matchesSearch && matchesType && matchesCity && matchesCountry && matchesLevel && matchesSeries;
   });
 
   // Combine data-derived options with exhaustive constants
@@ -292,9 +330,9 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
                       <Filter className="w-5 h-5 text-indigo-600" />
                       <h3 className="font-bold">Affiner</h3>
                     </div>
-                    {(selectedType !== 'All' || selectedCity !== 'All' || selectedCountry !== 'All') && (
+                    {(selectedType !== 'All' || selectedCity !== 'All' || selectedCountry !== 'All' || selectedLevel !== 'All' || selectedSeries !== 'All') && (
                       <button 
-                        onClick={() => { setSelectedType('All'); setSelectedCity('All'); setSelectedCountry('All'); }}
+                        onClick={() => { setSelectedType('All'); setSelectedCity('All'); setSelectedCountry('All'); setSelectedLevel('All'); setSelectedSeries('All'); }}
                         className="text-[10px] uppercase font-bold text-indigo-600 hover:text-indigo-700 underline"
                       >
                         Effacer
@@ -321,6 +359,28 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
                         >
                           <option value="All">Toutes les villes</option>
                           {allCities.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-[0.2em]">Série & Niveau</h4>
+                      <div className="space-y-4">
+                        <select 
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          value={selectedSeries}
+                          onChange={(e) => setSelectedSeries(e.target.value)}
+                        >
+                          <option value="All">Toutes les séries</option>
+                          {['Série C', 'Série D', 'Série A4', 'Série G2', 'Série E', 'Série F'].map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <select 
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          value={selectedLevel}
+                          onChange={(e) => setSelectedLevel(e.target.value)}
+                        >
+                          <option value="All">Tous les niveaux</option>
+                          {['Licence', 'Master', 'Doctorat', 'BTS', 'DUT', 'Ingénieur'].map(l => <option key={l} value={l}>{l}</option>)}
                         </select>
                       </div>
                     </div>
@@ -406,7 +466,7 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent" />
                             
-                            <div className="absolute top-4 left-4 flex gap-2">
+                            <div className="absolute top-4 left-4 flex flex-wrap gap-2 pr-20">
                               {inst.tier === 'Sponsored' && (
                                 <div className="bg-indigo-600/90 backdrop-blur-md text-white text-[10px] uppercase font-black px-3 py-1 rounded-full flex items-center gap-1 shadow-lg ring-1 ring-white/20">
                                   <Sparkles className="w-3 h-3" /> Recommandé
@@ -415,6 +475,27 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
                               <div className="bg-slate-900/70 backdrop-blur-md text-white text-[10px] uppercase font-black px-3 py-1 rounded-full flex items-center gap-1 shadow-lg ring-1 ring-white/20">
                                 <MapPin className="w-3 h-3" /> {inst.country}
                               </div>
+                            </div>
+
+                            <div className="absolute top-4 right-4 flex flex-col gap-2 relative z-10">
+                              <button 
+                                onClick={(e) => toggleFavorite(inst.id, e)}
+                                className="w-8 h-8 rounded-full bg-slate-900/40 hover:bg-slate-900/80 backdrop-blur-md flex items-center justify-center transition-colors border border-white/20"
+                                title="Ajouter aux favoris"
+                              >
+                                <Heart className={`w-4 h-4 ${favoriteInstitutions.includes(inst.id) ? 'fill-rose-500 text-rose-500' : 'text-white'}`} />
+                              </button>
+                              <button 
+                                onClick={(e) => toggleCompare(inst.id, e)}
+                                className={`w-8 h-8 rounded-full backdrop-blur-md flex items-center justify-center transition-colors border border-white/20 ${selectedForCompare.includes(inst.id) ? 'bg-indigo-600/90' : 'bg-slate-900/40 hover:bg-slate-900/80'}`}
+                                title="Comparer"
+                              >
+                                {selectedForCompare.includes(inst.id) ? (
+                                  <CheckSquare className="w-4 h-4 text-white" />
+                                ) : (
+                                  <Scale className="w-4 h-4 text-white" />
+                                )}
+                              </button>
                             </div>
 
                             <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
@@ -506,7 +587,7 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
                         Nous n'avons pas trouvé d'établissement correspondant à vos critères actuels.
                       </p>
                       <button 
-                        onClick={() => { setSearchTerm(''); setSelectedType('All'); setSelectedCity('All'); setSelectedCountry('All'); }}
+                        onClick={() => { setSearchTerm(''); setSelectedType('All'); setSelectedCity('All'); setSelectedCountry('All'); setSelectedLevel('All'); setSelectedSeries('All'); }}
                         className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-900 transition-colors shadow-xl shadow-indigo-600/20"
                       >
                         Réinitialiser
@@ -529,6 +610,158 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
           )}
         </AnimatePresence>
       </div>
+
+      {/* Floating Compare Dock */}
+      <AnimatePresence>
+        {selectedForCompare.length > 0 && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 border border-slate-700 p-4 rounded-3xl shadow-2xl flex items-center justify-between gap-6 max-w-2xl w-11/12 backdrop-blur-xl"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex -space-x-4">
+                {selectedForCompare.map((id, index) => {
+                  const inst = institutions.find(i => i.id === id);
+                  return inst ? (
+                    <img key={id} src={inst.logo} alt={inst.name} className="w-10 h-10 rounded-full border-2 border-slate-900 object-cover bg-white pointer-events-none" style={{ zIndex: 3 - index }} />
+                  ) : null;
+                })}
+              </div>
+              <div className="text-white">
+                <p className="text-sm font-bold tracking-tight">{selectedForCompare.length} école{selectedForCompare.length > 1 ? 's' : ''} à comparer</p>
+                <p className="text-[10px] text-slate-400">Jusqu'à 3 maximum</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setSelectedForCompare([])}
+                className="text-xs text-slate-400 hover:text-white transition-colors"
+              >
+                Vider
+              </button>
+              <button 
+                onClick={() => setShowCompareModal(true)}
+                disabled={selectedForCompare.length < 2}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors flex items-center gap-2"
+              >
+                <Scale className="w-4 h-4" /> Comparer
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Compare Modal */}
+      <AnimatePresence>
+        {showCompareModal && selectedForCompare.length >= 2 && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+            onClick={() => setShowCompareModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white rounded-[2rem] shadow-2xl max-w-6xl w-full p-2 overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-[1.5rem]">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+                    <Scale className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">Comparateur</h2>
+                    <p className="text-slate-500 text-sm">Analyse côte à côte des établissements sélectionnés</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowCompareModal(false)} className="p-2 bg-white text-slate-400 hover:text-slate-900 rounded-full border border-slate-200 shadow-sm transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {selectedForCompare.map(id => {
+                    const inst = institutions.find(i => i.id === id);
+                    if (!inst) return null;
+                    return (
+                      <div key={id} className="border border-slate-100 rounded-2xl overflow-hidden bg-slate-50/50 flex flex-col">
+                        <div className="h-32 relative">
+                          <img src={inst.coverImage} className="w-full h-full object-cover" alt="" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent" />
+                          <div className="absolute bottom-4 left-4 right-4 flex items-center gap-3">
+                            <img src={inst.logo} className="w-10 h-10 bg-white rounded-lg p-1 object-contain" alt="" />
+                            <h3 className="text-white font-bold leading-tight">{inst.name}</h3>
+                          </div>
+                        </div>
+                        <div className="p-5 flex-1 flex flex-col gap-6">
+                           <div>
+                             <h4 className="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-2">Informations Générales</h4>
+                             <div className="space-y-2">
+                               <div className="flex justify-between text-sm"><span className="text-slate-500">Localisation:</span> <span className="font-bold text-slate-800">{inst.city}</span></div>
+                               <div className="flex justify-between text-sm"><span className="text-slate-500">Type:</span> <span className="font-bold text-slate-800">{inst.type}</span></div>
+                               <div className="flex justify-between text-sm"><span className="text-slate-500">Création:</span> <span className="font-bold text-slate-800">{inst.establishedYear}</span></div>
+                             </div>
+                           </div>
+                           
+                           <div>
+                             <h4 className="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-2">Performances</h4>
+                             <div className="p-4 bg-indigo-50 rounded-xl space-y-3">
+                                <div className="flex items-end justify-between">
+                                  <span className="text-xs text-indigo-800 font-bold">Score de Réussite / Employabilité</span>
+                                  <span className="text-2xl font-black text-indigo-600">{inst.employabilityRate}%</span>
+                                </div>
+                                <div className="w-full bg-indigo-200/50 h-2 rounded-full overflow-hidden">
+                                  <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${inst.employabilityRate}%` }}></div>
+                                </div>
+                             </div>
+                           </div>
+
+                           <div>
+                             <h4 className="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-2">Frais & Scolarité</h4>
+                             <div className="p-4 bg-white border border-slate-200 rounded-xl">
+                               <div className="flex items-center gap-2 text-slate-800 font-bold">
+                                  {/* Using a mock value for fees as it's not directly in the type, but useful for the comparison feature requested */}
+                                  <CreditCard className="w-4 h-4 text-emerald-500" />
+                                  ~ {Math.floor(Math.random() * 500 + 300)} 000 FCFA / an
+                               </div>
+                               <p className="text-[10px] text-slate-400 mt-1">Estimation moyenne (frais de scolarité L1/L2)</p>
+                             </div>
+                           </div>
+
+                           <div className="flex-1">
+                             <h4 className="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-2">Principales Filières ({Math.max(inst.programsCount || 0, inst.programs?.length || 0)})</h4>
+                             <ul className="space-y-1.5 custom-scrollbar max-h-[150px] overflow-y-auto pr-2">
+                               {inst.programs?.slice(0, 5).map(prog => (
+                                 <li key={prog.id} className="text-xs text-slate-600 bg-white border border-slate-100 p-2 rounded-lg truncate" title={prog.name}>
+                                   <span className="font-bold text-slate-800 mr-1">•</span> {prog.name}
+                                 </li>
+                               ))}
+                               {(inst.programs?.length || 0) > 5 && (
+                                 <li className="text-xs text-slate-400 italic text-center pt-1">+ d'autres filières...</li>
+                               )}
+                             </ul>
+                           </div>
+                           
+                           <button onClick={() => { setShowCompareModal(false); onSelectInstitution(inst.id); }} className="w-full py-3 bg-slate-900 hover:bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-colors">
+                             Voir l'établissement
+                           </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

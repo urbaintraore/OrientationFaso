@@ -33,12 +33,16 @@ import {
   School,
   Lock,
   AlertTriangle,
-  FolderOpen
+  FolderOpen,
+  Bell,
+  BookOpen
 } from 'lucide-react';
 import { UniversityAnalysisResult, PostBacProfile } from '../types';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { RecommendationRating } from './RecommendationRating';
+import { evaluateBacOrientation, getSubjectScore } from '../services/pedagogicalEngine';
 
 interface UniversityResultsDashboardProps {
   result: UniversityAnalysisResult;
@@ -69,6 +73,89 @@ export function UniversityResultsDashboard({ result, profile, onReset, hasPaid, 
   console.log("UniversityResultsDashboard rendering with result:", result);
   const contentRef = useRef<HTMLDivElement>(null);
   const [filterType, setFilterType] = useState<string>('Tous');
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
+
+  // Call client-side pedagogical engine mathematically to align completely
+  const mathOrientationReports = profile ? evaluateBacOrientation(profile) : [];
+  
+  // State for compatibility report visual view
+  const [selectedCompatMajor, setSelectedCompatMajor] = useState<string>(
+    mathOrientationReports[0]?.slug || 'Genie_Logiciel'
+  );
+
+  const majorSubjectsMap: Record<string, Array<{ subject: string, weight: number }>> = {
+    'Genie_Logiciel': [
+      { subject: 'Mathématiques', weight: 5 },
+      { subject: 'Physique-Chimie', weight: 4 },
+      { subject: 'Anglais', weight: 3 }
+    ],
+    'Reseaux_Telecoms': [
+      { subject: 'Mathématiques', weight: 5 },
+      { subject: 'Physique-Chimie', weight: 4 },
+      { subject: 'Anglais', weight: 3 }
+    ],
+    'Medecine': [
+      { subject: 'Chimie', weight: 5 },
+      { subject: 'SVT', weight: 5 },
+      { subject: 'Physique-Chimie', weight: 4 },
+      { subject: 'Mathématiques', weight: 3.5 }
+    ],
+    'Agronomie_SVT': [
+      { subject: 'SVT', weight: 5 },
+      { subject: 'Chimie', weight: 4 },
+      { subject: 'Mathématiques', weight: 3 }
+    ],
+    'Journalisme_Com': [
+      { subject: 'Français', weight: 5 },
+      { subject: 'Philosophie', weight: 4 },
+      { subject: 'Anglais', weight: 4 }
+    ],
+    'Sciences_Eco_Gestion': [
+      { subject: 'Mathématiques', weight: 5 },
+      { subject: 'Français', weight: 3 },
+      { subject: 'Anglais', weight: 3 }
+    ],
+    'Droit_Sciences_Pol': [
+      { subject: 'Français', weight: 5 },
+      { subject: 'Philosophie', weight: 4 },
+      { subject: 'Histoire-Géo', weight: 3 }
+    ],
+    'Genie_Civil_Mines': [
+      { subject: 'Mathématiques', weight: 5 },
+      { subject: 'Physique-Chimie', weight: 5 },
+      { subject: 'Français', weight: 2 }
+    ]
+  };
+
+  const currentReport = mathOrientationReports.find(r => r.slug === selectedCompatMajor);
+  const currentMajorSubjects = majorSubjectsMap[selectedCompatMajor] || [];
+  const compatChartData = currentMajorSubjects.map(sub => {
+    const grade = profile ? getSubjectScore(profile.bacGrades, sub.subject, 10) : 10;
+    return {
+      subject: sub.subject,
+      'Coefficient': sub.weight,
+      'Ma Note': grade,
+      'Pondération': Math.round(grade * sub.weight)
+    };
+  });
+  
+  const handleEnableAlerts = () => {
+    if ('Notification' in window) {
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') {
+          setAlertsEnabled(true);
+          alert("Alertes bourses activées via Firebase Messaging ! Vous recevrez des notifications push.");
+        } else {
+          alert("Vous devez autoriser les notifications pour activer les alertes bourses.");
+        }
+      });
+    } else {
+      setAlertsEnabled(true);
+      alert("Alertes bourses activées !");
+    }
+  };
+
+  const weakSubjects = profile?.bacGrades?.filter(g => g.grade < 12) || [];
   
   const chartData = result?.recommendedMajors?.slice(0, 5).map(m => ({
     name: m.major,
@@ -139,7 +226,7 @@ export function UniversityResultsDashboard({ result, profile, onReset, hasPaid, 
   };
 
   const handleDownloadPDF = async () => {
-    if (!contentRef.current) return;
+    if (!contentRef.current || !profile) return;
 
     try {
       const canvas = await html2canvas(contentRef.current, {
@@ -156,23 +243,51 @@ export function UniversityResultsDashboard({ result, profile, onReset, hasPaid, 
         format: 'a4'
       });
 
-      const imgWidth = 210;
+      pdf.setFontSize(22);
+      pdf.text(`Rapport d'Orientation Post-BAC - ${profile.name}`, 14, 20);
+
+      const gradesTableBody = [...(profile.gradesHistory || [])].reverse().map(h => [h.level, h.average.toString()]);
+      
+      autoTable(pdf, {
+        startY: 30,
+        head: [['Niveau / Année', 'Moyenne Générale']],
+        body: gradesTableBody,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] },
+        didParseCell: function(data) {
+          if (data.section === 'body' && data.column.index === 1) {
+            const avg = parseFloat(data.cell.raw as string);
+            if (!isNaN(avg)) {
+              if (avg >= 12) {
+                data.cell.styles.textColor = [22, 163, 74];
+                data.cell.styles.fontStyle = 'bold';
+              } else if (avg < 10) {
+                data.cell.styles.textColor = [220, 38, 38];
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+          }
+        }
+      });
+
+      const finalY = (pdf as any).lastAutoTable.finalY + 10;
+      const imgWidth = 190;
       const pageHeight = 297;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       let heightLeft = imgHeight;
-      let position = 0;
+      let position = finalY;
 
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
+      heightLeft -= (pageHeight - position);
 
       while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
 
-      pdf.save('oriente-bf-resultats-universitaire.pdf');
+      pdf.save(`oriente-bf-resultats-universitaire-${profile.name}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
       try {
@@ -184,6 +299,19 @@ export function UniversityResultsDashboard({ result, profile, onReset, hasPaid, 
         alert('Une erreur est survenue. Essayez CTRL+P ou CMD+P pour imprimer la page.');
       }
     }
+  };
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.15 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    show: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 300, damping: 24 } }
   };
 
   if (!result) {
@@ -223,6 +351,14 @@ export function UniversityResultsDashboard({ result, profile, onReset, hasPaid, 
             </button>
           )}
           <button
+            onClick={handleEnableAlerts}
+            className={`flex items-center gap-2 px-4 py-2 ${alertsEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'} rounded-lg transition-colors shadow-sm`}
+            title="Activer les alertes bourses via Firebase Messaging"
+          >
+            <Bell className="w-4 h-4" />
+            {alertsEnabled ? 'Alertes Activées' : 'Activer Alertes Bourses'}
+          </button>
+          <button
             onClick={handleDownloadCSV}
             className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors shadow-sm"
             title="Exporter au format CSV"
@@ -259,9 +395,14 @@ export function UniversityResultsDashboard({ result, profile, onReset, hasPaid, 
             </p>
           </div>
           
-          <div className="p-8 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-6 results-dashboard-grid">
+          <motion.div 
+            variants={containerVariants} 
+            initial="hidden" 
+            animate="show" 
+            className="p-8 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-6 results-dashboard-grid"
+          >
             {/* Probability Stats */}
-            <div className="space-y-6 md:col-span-2 lg:col-span-4">
+            <motion.div variants={itemVariants} className="space-y-6 md:col-span-2 lg:col-span-4">
               <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 relative overflow-hidden">
                 {!hasPaid && <PremiumOverlay onUpgrade={onUpgrade} />}
                 <div className="flex items-center justify-between mb-2">
@@ -285,10 +426,10 @@ export function UniversityResultsDashboard({ result, profile, onReset, hasPaid, 
                 <div className="text-xl font-bold text-slate-900">{result.employabilityRating || "N/A"}</div>
                 <p className="text-xs text-slate-500 mt-1">Sur le marché du travail actuel</p>
               </div>
-            </div>
+            </motion.div>
 
             {/* Top 5 Majors Chart */}
-            <div className="md:col-span-2 lg:col-span-8 bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col">
+            <motion.div variants={itemVariants} className="md:col-span-2 lg:col-span-8 bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col">
               <h4 className="font-semibold text-slate-900 mb-6 flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-amber-500" />
                 Top 5 des Filières Recommandées
@@ -317,145 +458,302 @@ export function UniversityResultsDashboard({ result, profile, onReset, hasPaid, 
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </div>
-          </div>
-        </motion.div>
+            </motion.div>
 
-        {/* All Recommended Majors with Filter */}
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-indigo-500" />
-              Toutes les filières recommandées
-            </h3>
-            
-            <div className="flex flex-wrap gap-2">
-              {['Tous', 'Licence', 'Master', 'BTS/DUT', 'Ingénieur'].map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setFilterType(type)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                    filterType === type 
-                      ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' 
-                      : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            {filteredMajors.map((major, idx) => (
-              <div key={idx} className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 hover:shadow-sm transition-all group">
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <h4 className="font-semibold text-slate-800 text-sm group-hover:text-indigo-700 transition-colors">
-                    {major.major}
+            {/* Section Analyse de compatibilité */}
+            <motion.div variants={itemVariants} className="lg:col-span-12 bg-white rounded-2xl p-6 border border-indigo-100 flex flex-col mt-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                    <Target className="w-5 h-5 text-indigo-600" />
+                    Analyse de compatibilité & Pondération des Matières
                   </h4>
-                  <div className="text-xs font-bold px-2 py-1 bg-white border border-slate-200 rounded text-slate-600 shrink-0">
-                    {major.score}% match
+                  <p className="text-sm text-slate-500">Moteur pédagogique d’adéquation basé sur les coefficients stricts de chaque filière universitaire</p>
+                </div>
+                
+                {/* Major Choices Dropdown */}
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    value={selectedCompatMajor}
+                    onChange={(e) => setSelectedCompatMajor(e.target.value)}
+                    className="bg-slate-50 text-slate-800 font-bold text-sm px-4 py-2 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {mathOrientationReports.map((report) => (
+                      <option key={report.slug} value={report.slug}>
+                        {report.name} (Match: {report.score}%)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {currentReport && (
+                <div className="grid md:grid-cols-12 gap-6 items-stretch">
+                  {/* Left explanation info */}
+                  <div className="md:col-span-5 flex flex-col justify-between space-y-4">
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-slate-700">Indice d'Orientation</span>
+                        <span className={`px-2 py-0.5 text-[11px] font-bold rounded ${
+                          currentReport.score >= 75 ? 'bg-emerald-100 text-emerald-800' :
+                          currentReport.score >= 55 ? 'bg-blue-100 text-blue-800' :
+                          currentReport.score >= 35 ? 'bg-amber-100 text-amber-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {currentReport.suitability}
+                        </span>
+                      </div>
+                      <div className="text-4xl font-extrabold text-indigo-900 mb-2">{currentReport.score}%</div>
+                      <p className="text-xs text-slate-500 leading-relaxed font-semibold">{currentReport.dominantGradeReason}</p>
+                    </div>
+
+                    <div className="p-4 bg-indigo-50/55 rounded-xl border border-indigo-100/50 flex-1">
+                      <h5 className="text-xs font-bold uppercase tracking-wider text-indigo-800 mb-2">Critères de Décision</h5>
+                      <p className="text-sm text-slate-700 leading-relaxed font-medium">
+                        {currentReport.explanation}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right chart */}
+                  <div className="md:col-span-7 bg-slate-50 p-4 rounded-xl border border-slate-100 h-64 flex flex-col">
+                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4 text-center">Profil des Notes vs Exigence de Coefficient</h5>
+                    <div className="flex-1">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={compatChartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                          <XAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 10, fontWeight: 600 }} />
+                          <YAxis yAxisId="left" domain={[0, 20]} stroke="#4f46e5" tick={{ fontSize: 10 }} />
+                          <YAxis yAxisId="right" domain={[0, 5]} orientation="right" stroke="#10b981" tick={{ fontSize: 10 }} />
+                          <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                          <Bar yAxisId="left" dataKey="Ma Note" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                          <Bar yAxisId="right" dataKey="Coefficient" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 </div>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  {major.matchReason}
-                </p>
-              </div>
-            ))}
-            {filteredMajors.length === 0 && (
-              <div className="col-span-2 text-center py-8 text-slate-500 text-sm">
-                Aucune filière trouvée pour ce type de diplôme.
-              </div>
-            )}
-          </div>
+              )}
+            </motion.div>
+          </motion.div>
         </motion.div>
 
-        {/* Profile Summary (BAC Grades) */}
-        {profile && (
+        {/* Filières Compatibles vs Filières à Haut Risque */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Filières Compatibles */}
           <motion.div 
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.15 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 grid md:grid-cols-2 gap-8"
+            className="bg-white rounded-2xl p-6 shadow-sm border border-emerald-100 bg-emerald-50/5"
           >
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-slate-100 text-slate-600 rounded-lg">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                <CheckCircle className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-slate-900 text-base">Filières universitaires compatibles</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              Domaines d'études recommandés où ton profil assure une excellente assimilation scientifique avec un niveau adéquat dans les matières clefs.
+            </p>
+            <div className="space-y-3">
+              {mathOrientationReports.filter(r => r.score >= 45).map((r, i) => (
+                <div key={i} className="p-3 bg-white rounded-xl border border-slate-100 flex items-start gap-4 justify-between shadow-sm hover:border-indigo-100 hover:shadow transition-all">
+                  <div className="space-y-1">
+                    <span className="text-sm font-bold text-slate-800">{r.name}</span>
+                    <p className="text-xs text-slate-500 leading-relaxed">{r.explanation.split('**Points d\'alerte :**')[0]}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full inline-block">{r.score}% match</span>
+                  </div>
+                </div>
+              ))}
+              {mathOrientationReports.filter(r => r.score >= 45).length === 0 && (
+                <p className="text-sm text-slate-500 italic text-center py-4">Aucune filière compatible trouvée dans cette simulation.</p>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Filières à Haut Risque */}
+          <motion.div 
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-rose-100 bg-rose-50/5"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-slate-900 text-base">Filières à haut risque académique</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4 text-rose-800">
+              Fortement déconseillées car tes résultats d'examens se situent en dessous des seuils d'apprentissage exigés (ex. &lt;7/20, &lt;8/20), entraînant des risques importants de redoublement.
+            </p>
+            <div className="space-y-3">
+              {mathOrientationReports.filter(r => r.score < 45 || r.suitability === 'Fortement Déconseillée' || r.suitability === 'Déconseillée').map((r, i) => (
+                <div key={i} className="p-3 bg-white rounded-xl border border-rose-50 border-l-4 border-l-rose-500 flex items-start gap-4 justify-between shadow-sm">
+                  <div className="space-y-1">
+                    <span className="text-sm font-bold text-slate-800">{r.name}</span>
+                    <p className="text-xs text-rose-700 leading-relaxed font-bold">
+                      {r.explanation.includes('**Points d\'alerte :**')
+                        ? r.explanation.substring(r.explanation.indexOf('**Points d\'alerte :**'))
+                        : r.explanation || "Seuils académiques inatteignables."}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-full inline-block">Score: {r.score}%</span>
+                  </div>
+                </div>
+              ))}
+              {mathOrientationReports.filter(r => r.score < 45 || r.suitability === 'Fortement Déconseillée' || r.suitability === 'Déconseillée').length === 0 && (
+                <p className="text-sm text-slate-500 italic text-center py-4">Excellente trajectoire : aucune filière ne présente de risque critique.</p>
+              )}
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Tableau Récapitulatif Scolaire de 3 Ans (Lecteur Parental) & Radar Summary */}
+        {profile && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 grid grid-cols-1 lg:grid-cols-12 gap-8"
+          >
+            {/* Left Column (Table) */}
+            <div className="lg:col-span-8 space-y-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
                   <FileText className="w-5 h-5" />
                 </div>
-                <h3 className="font-semibold text-slate-900">Rappel de tes résultats (BAC)</h3>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="text-xs text-slate-500 mb-1">Moyenne BAC</div>
-                  <div className="text-lg font-bold text-slate-900">{profile.bacAverage}/20</div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Tableau Trajectoire & Lecture Parentale (Notes sur 3 ans)</h3>
+                  <p className="text-xs text-slate-500">
+                    Suivi de l'évolution de l'élève par les parents de la classe de Seconde au BAC : <span className="text-emerald-600 font-bold">vert (&gt;12)</span> pour des notes régulières, <span className="text-rose-600 font-bold">rouge (&lt;10)</span> pour des moyennes à redresser.
+                  </p>
                 </div>
-                {profile.bacGrades.map((grade, i) => (
-                  <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className="text-xs text-slate-500 mb-1 truncate" title={grade.subject}>{grade.subject}</div>
-                    <div className="text-lg font-bold text-slate-900">{grade.grade}/20</div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="py-3 px-4 text-xs font-bold uppercase text-slate-500 tracking-wider">Matières</th>
+                      {[...(profile.gradesHistory || [])].reverse().map((year, entryIdx) => (
+                        <th key={entryIdx} className="py-3 px-4 text-xs font-bold uppercase text-slate-500 tracking-wider text-center">
+                          Classe de {year.level} (Moy: {year.average?.toFixed(2)})
+                        </th>
+                      ))}
+                      <th className="py-3 px-4 text-xs font-bold uppercase text-indigo-600 tracking-wider text-center">
+                        Notes Finales BAC
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {['Mathématiques', 'Physique-Chimie', 'SVT', 'Chimie', 'Français', 'Anglais', 'Philosophie', 'Histoire-Géo'].map((subjectName) => {
+                      return (
+                        <tr key={subjectName} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3 px-4 font-semibold text-sm text-slate-800">{subjectName}</td>
+                          {[...(profile.gradesHistory || [])].reverse().map((year, yrIdx) => {
+                            const yearGrade = getSubjectScore(year.grades, subjectName, -1);
+                            return (
+                              <td key={yrIdx} className="py-3 px-4 text-center">
+                                {yearGrade === -1 ? (
+                                  <span className="text-slate-400 font-medium">-</span>
+                                ) : (
+                                  <span className={`px-2.5 py-1 rounded font-bold text-sm inline-block ${
+                                    yearGrade >= 12 ? 'bg-emerald-50 text-emerald-700' :
+                                    yearGrade < 10 ? 'bg-rose-50 text-rose-700' :
+                                    'bg-slate-100 text-slate-700'
+                                  }`}>
+                                    {yearGrade.toFixed(1)}/20
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="py-3 px-4 text-center">
+                            {(() => {
+                              const currentG = getSubjectScore(profile.bacGrades, subjectName, -1);
+                              if (currentG === -1) return <span className="text-slate-400 font-medium">-</span>;
+                              return (
+                                <span className={`px-2.5 py-1 rounded-md font-extrabold text-sm inline-block border ${
+                                  currentG >= 12 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                                  currentG < 10 ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                                  'bg-indigo-50 text-indigo-800 border-indigo-200'
+                                }`}>
+                                  {currentG.toFixed(1)}/20
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Right Column (Radar & History Line Chart & MOOC suggestions) */}
+            <div className="lg:col-span-4 flex flex-col justify-between space-y-6">
+              {/* Radar Chart */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <h4 className="font-semibold text-slate-900 mb-2 text-center text-sm">Forces & Faiblesses (Radar)</h4>
+                <div className="h-56 w-full radar-chart-container">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={profile.bacGrades.slice(0, 5).map(g => ({ subject: g.subject.substring(0,6), grade: g.grade, fullMark: 20 }))}>
+                      <PolarGrid stroke="#e2e8f0" />
+                      <PolarAngleAxis dataKey="subject" tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }} />
+                      <PolarRadiusAxis angle={30} domain={[0, 20]} tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} />
+                      <Radar name="Notes" dataKey="grade" stroke="#6366f1" strokeWidth={2} fill="#6366f1" fillOpacity={0.2} dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Evolution Chart over 3 years */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <h4 className="font-semibold text-slate-900 mb-2 text-center text-sm">Évolution de la Moyenne</h4>
+                <div className="h-44 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={[...(profile.gradesHistory || [])].reverse()}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="level" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[0, 20]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        formatter={(value: any) => [`${value} / 20`, 'Moyenne']}
+                        labelStyle={{ color: '#64748b', fontWeight: 500, marginBottom: '4px' }}
+                      />
+                      <Line type="monotone" dataKey="average" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* MOOCs Suggestions */}
+              {weakSubjects.length > 0 && (
+                <div className="border-t border-slate-100 pt-4">
+                  <h4 className="font-semibold text-slate-900 mb-3 text-sm">Cours de soutien suggérés (MOOCs)</h4>
+                  <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                    {weakSubjects.map((w, idx) => (
+                      <a key={idx} href={`https://www.coursera.org/search?query=${encodeURIComponent(w.subject)}&language=French`} target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 p-2.5 bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 rounded-xl transition-colors group">
+                        <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg group-hover:scale-110 transition-transform">
+                          <BookOpen className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <h5 className="font-semibold text-slate-800 text-xs">Améliorer en {w.subject}</h5>
+                          <p className="text-[10px] text-slate-500 font-medium">Explorer les cours gratuits d'appui</p>
+                        </div>
+                      </a>
+                    ))}
                   </div>
-                ))}
-                {profile.transcriptUrl && (
-                  <a 
-                    href={profile.transcriptUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 flex flex-col items-center justify-center hover:bg-indigo-100 transition-colors group"
-                  >
-                    <div className="text-[10px] text-indigo-500 font-bold uppercase mb-1 flex items-center gap-1">
-                      Relevé <ExternalLink className="w-2 h-2" />
-                    </div>
-                    <div className="text-indigo-700">
-                      <FileText className="w-5 h-5" />
-                    </div>
-                  </a>
-                )}
-              </div>
-            </div>
-
-            {/* Radar Chart for subjects */}
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-4 text-center">Forces & Faiblesses (Radar)</h4>
-              <div className="h-64 w-full radar-chart-container">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="70%" data={profile.bacGrades.slice(0, 5).map(g => ({ subject: g.subject.substring(0,6), grade: g.grade, fullMark: 20 }))}>
-                    <PolarGrid stroke="#e2e8f0" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#334155', fontSize: 12, fontWeight: 600 }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 20]} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} />
-                    <Radar name="Notes" dataKey="grade" stroke="#6366f1" strokeWidth={2} fill="#6366f1" fillOpacity={0.2} dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} />
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Evolution Chart over 3 years */}
-            <div className="md:col-span-2 mt-4 border-t border-slate-100 pt-6 chart-container">
-              <h4 className="font-semibold text-slate-900 mb-4 text-center">Évolution de la Moyenne</h4>
-              <div className="h-48 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={[...(profile?.gradesHistory || [])].reverse()}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="level" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 20]} tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: any) => [`${value} / 20`, 'Moyenne']}
-                      labelStyle={{ color: '#64748b', fontWeight: 500, marginBottom: '4px' }}
-                    />
-                    <Line type="monotone" dataKey="average" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
+
 
         {/* Details Grid */}
         <div className="grid md:grid-cols-2 gap-6 relative">

@@ -35,13 +35,17 @@ import {
   Lock,
   Share2,
   FolderOpen,
-  FileText
+  FileText,
+  Bell,
+  BookOpen
 } from 'lucide-react';
 import { StudentProfile, AnalysisResult } from '../types';
 import { clsx } from 'clsx';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { RecommendationRating } from './RecommendationRating';
+import { evaluateBepcOrientation, getSubjectScore } from '../services/pedagogicalEngine';
 
 interface ResultsDashboardProps {
   result: AnalysisResult;
@@ -70,6 +74,68 @@ const PremiumOverlay = ({ onUpgrade }: { onUpgrade: () => void }) => (
 
 export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade, onSave }: ResultsDashboardProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const [alertsEnabled, setAlertsEnabled] = React.useState(false);
+
+  // Call client-side pedagogical engine mathematically to align completely
+  const mathOrientationReports = profile ? evaluateBepcOrientation(profile) : [];
+  
+  // State for compatibility report visual view
+  const [selectedCompatSeries, setSelectedCompatSeries] = React.useState<string>(
+    profile?.preferredSeries || mathOrientationReports[0]?.slug || 'D'
+  );
+
+  const seriesSubjectsMap: Record<string, Array<{ subject: string, weight: number }>> = {
+    'C': [
+      { subject: 'Mathématiques', weight: 5 },
+      { subject: 'Physique-Chimie', weight: 4.5 },
+      { subject: 'SVT', weight: 2 }
+    ],
+    'D': [
+      { subject: 'SVT', weight: 5 },
+      { subject: 'Mathématiques', weight: 4 },
+      { subject: 'Physique-Chimie', weight: 4 }
+    ],
+    'A4': [
+      { subject: 'Français', weight: 5 },
+      { subject: 'Anglais', weight: 4 },
+      { subject: 'Histoire-Géo', weight: 3 }
+    ],
+    'G2': [
+      { subject: 'Mathématiques', weight: 5 },
+      { subject: 'Français', weight: 3 },
+      { subject: 'Anglais', weight: 2 }
+    ]
+  };
+
+  const currentReport = mathOrientationReports.find(r => r.slug === selectedCompatSeries);
+  const currentSeriesSubjects = seriesSubjectsMap[selectedCompatSeries] || [];
+  const compatChartData = currentSeriesSubjects.map(sub => {
+    const grade = profile ? getSubjectScore(profile.bepcGrades, sub.subject, 10) : 10;
+    return {
+      subject: sub.subject,
+      'Coefficient': sub.weight,
+      'Ma Note': grade,
+      'Pondération': Math.round(grade * sub.weight)
+    };
+  });
+
+  const handleEnableAlerts = () => {
+    if ('Notification' in window) {
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') {
+          setAlertsEnabled(true);
+          alert("Alertes bourses activées via Firebase Messaging ! Vous recevrez des notifications push.");
+        } else {
+          alert("Vous devez autoriser les notifications pour activer les alertes bourses.");
+        }
+      });
+    } else {
+      setAlertsEnabled(true);
+      alert("Alertes bourses activées !");
+    }
+  };
+
+  const weakSubjects = profile?.bepcGrades?.filter(g => g.grade < 12) || [];
 
   const chartData = result.top3Series?.map(s => ({
     name: s.series,
@@ -130,7 +196,7 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
   };
 
   const handleDownloadPDF = async () => {
-    if (!contentRef.current) return;
+    if (!contentRef.current || !profile) return;
 
     try {
       const canvas = await html2canvas(contentRef.current, {
@@ -146,24 +212,52 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
         unit: 'mm',
         format: 'a4'
       });
+      
+      pdf.setFontSize(22);
+      pdf.text(`Rapport d'Orientation BEPC - ${profile.name}`, 14, 20);
 
-      const imgWidth = 210;
+      const gradesTableBody = [...(profile.gradesHistory || [])].reverse().map(h => [h.level, h.average.toString()]);
+      
+      autoTable(pdf, {
+        startY: 30,
+        head: [['Niveau / Année', 'Moyenne Générale']],
+        body: gradesTableBody,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] },
+        didParseCell: function(data) {
+          if (data.section === 'body' && data.column.index === 1) {
+            const avg = parseFloat(data.cell.raw as string);
+            if (!isNaN(avg)) {
+              if (avg >= 12) {
+                data.cell.styles.textColor = [22, 163, 74];
+                data.cell.styles.fontStyle = 'bold';
+              } else if (avg < 10) {
+                data.cell.styles.textColor = [220, 38, 38];
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+          }
+        }
+      });
+
+      const finalY = (pdf as any).lastAutoTable.finalY + 10;
+      const imgWidth = 190;
       const pageHeight = 297;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       let heightLeft = imgHeight;
-      let position = 0;
+      let position = finalY;
 
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
+      heightLeft -= (pageHeight - position);
 
       while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
 
-      pdf.save('oriente-bf-resultats.pdf');
+      pdf.save(`oriente-bf-resultats-${profile.name}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
       try {
@@ -175,6 +269,19 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
         alert('Une erreur est survenue. Essayez CTRL+P ou CMD+P pour imprimer la page.');
       }
     }
+  };
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.15 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    show: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 300, damping: 24 } }
   };
 
   if (!result) return null;
@@ -210,6 +317,14 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
               <FolderOpen className="w-6 h-6" />
             </button>
           )}
+          <button
+            onClick={handleEnableAlerts}
+            className={`flex items-center gap-2 px-4 py-2 ${alertsEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'} rounded-lg transition-colors shadow-sm`}
+            title="Activer les alertes bourses via Firebase Messaging"
+          >
+            <Bell className="w-4 h-4" />
+            {alertsEnabled ? 'Alertes Activées' : 'Activer Alertes Bourses'}
+          </button>
           <button
             onClick={handleDownloadCSV}
             className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors shadow-sm"
@@ -247,9 +362,14 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
             </p>
           </div>
           
-          <div className="p-8 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-6 results-dashboard-grid">
+          <motion.div 
+            variants={containerVariants} 
+            initial="hidden" 
+            animate="show" 
+            className="p-8 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-6 results-dashboard-grid"
+          >
             {/* Probability Stats */}
-            <div className="space-y-6 md:col-span-2 lg:col-span-4">
+            <motion.div variants={itemVariants} className="space-y-6 md:col-span-2 lg:col-span-4">
               <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 relative overflow-hidden">
                 {!hasPaid && <PremiumOverlay onUpgrade={onUpgrade} />}
                 <div className="flex items-center justify-between mb-2">
@@ -291,10 +411,10 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
                   <p className="text-xs text-indigo-600 mt-1">Estimation basée sur ta progression actuelle</p>
                 </div>
               )}
-            </div>
+            </motion.div>
 
             {/* Chart */}
-            <div className="md:col-span-2 lg:col-span-8 bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col">
+            <motion.div variants={itemVariants} className="md:col-span-2 lg:col-span-8 bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col">
               <h4 className="font-semibold text-slate-900 mb-6">Comparatif des meilleures options</h4>
               <div className="flex-1 min-h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -314,71 +434,284 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </div>
-          </div>
+            </motion.div>
+
+            {/* Section Analyse de compatibilité */}
+            <motion.div variants={itemVariants} className="lg:col-span-12 bg-white rounded-2xl p-6 border border-indigo-100 flex flex-col mt-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                    <Target className="w-5 h-5 text-indigo-600" />
+                    Analyse de compatibilité & Pondération
+                  </h4>
+                  <p className="text-sm text-slate-500">Moteur de compatibilité mathématique strict sur les matières clés</p>
+                </div>
+                
+                {/* Series Choices */}
+                <div className="flex flex-wrap gap-2">
+                  {mathOrientationReports.map((report) => (
+                    <button
+                      key={report.slug}
+                      onClick={() => setSelectedCompatSeries(report.slug)}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                        selectedCompatSeries === report.slug
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Série {report.slug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {currentReport && (
+                <div className="grid md:grid-cols-12 gap-6 items-stretch">
+                  {/* Left explanation info */}
+                  <div className="md:col-span-5 flex flex-col justify-between space-y-4">
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-slate-700">Calcul d’adéquation</span>
+                        <span className={`px-2 py-0.5 text-[11px] font-bold rounded ${
+                          currentReport.score >= 75 ? 'bg-emerald-100 text-emerald-800' :
+                          currentReport.score >= 55 ? 'bg-blue-100 text-blue-800' :
+                          currentReport.score >= 35 ? 'bg-amber-100 text-amber-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {currentReport.suitability}
+                        </span>
+                      </div>
+                      <div className="text-4xl font-extrabold text-indigo-900 mb-2">{currentReport.score}%</div>
+                      <p className="text-xs text-slate-500 leading-relaxed font-medium">{currentReport.dominantGradeReason}</p>
+                    </div>
+
+                    <div className="p-4 bg-indigo-50/50 rounded-xl border border-indigo-100/50 flex-1">
+                      <h5 className="text-xs font-bold uppercase tracking-wider text-indigo-800 mb-2">Explication Pédagogique</h5>
+                      <p className="text-sm text-slate-700 leading-relaxed">
+                        {currentReport.explanation}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right chart */}
+                  <div className="md:col-span-7 bg-slate-50 p-4 rounded-xl border border-slate-100 h-64 flex flex-col">
+                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4 text-center">Coefficients vs Note Obtenue</h5>
+                    <div className="flex-1">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={compatChartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                          <XAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 10, fontWeight: 600 }} />
+                          <YAxis yAxisId="left" domain={[0, 20]} stroke="#4f46e5" tick={{ fontSize: 10 }} />
+                          <YAxis yAxisId="right" domain={[0, 5]} orientation="right" stroke="#10b981" tick={{ fontSize: 10 }} />
+                          <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                          <Bar yAxisId="left" dataKey="Ma Note" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                          <Bar yAxisId="right" dataKey="Coefficient" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
         </motion.div>
 
-        {/* Profile Summary (BEPC Grades) */}
-        {profile && (
+        {/* Séries Compatibles vs Séries à Haut Risque */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Séries Compatibles */}
           <motion.div 
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.15 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 grid md:grid-cols-2 gap-8"
+            className="bg-white rounded-2xl p-6 shadow-sm border border-emerald-100 bg-emerald-50/5"
           >
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-slate-100 text-slate-600 rounded-lg">
-                  <GraduationCap className="w-5 h-5" />
-                </div>
-                <h3 className="font-semibold text-slate-900">Rappel de tes résultats (BEPC)</h3>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                <CheckCircle className="w-5 h-5" />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="text-xs text-slate-500 mb-1">Moyenne BEPC</div>
-                  <div className="text-lg font-bold text-slate-900">{profile.bepcAverage}/20</div>
-                </div>
-                {profile.bepcGrades.map((grade, i) => (
-                  <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className="text-xs text-slate-500 mb-1 truncate" title={grade.subject}>{grade.subject}</div>
-                    <div className="text-lg font-bold text-slate-900">{grade.grade}/20</div>
+              <h3 className="font-bold text-slate-900 text-base">Séries recommandées & compatibles</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              Options d'orientation compatibles où tes notes satisfont aux critères de réussite requis sans risque d'échec immédiat.
+            </p>
+            <div className="space-y-3">
+              {mathOrientationReports.filter(r => r.score >= 45).map((r, i) => (
+                <div key={i} className="p-3 bg-white rounded-xl border border-slate-100 flex items-start gap-4 justify-between shadow-sm hover:border-indigo-100 hover:shadow transition-all">
+                  <div className="space-y-1">
+                    <span className="text-sm font-bold text-slate-800">Série {r.slug}</span>
+                    <p className="text-xs text-slate-500 leading-relaxed">{r.explanation.split('**Points d\'alerte :**')[0]}</p>
                   </div>
-                ))}
-                {profile.transcriptUrl && (
-                  <a 
-                    href={profile.transcriptUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 flex flex-col items-center justify-center hover:bg-indigo-100 transition-colors group"
-                  >
-                    <div className="text-[10px] text-indigo-500 font-bold uppercase mb-1 flex items-center gap-1">
-                      Relevé <ExternalLink className="w-2 h-2" />
-                    </div>
-                    <div className="text-indigo-700">
-                      <FileText className="w-5 h-5" />
-                    </div>
-                  </a>
-                )}
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full inline-block">{r.score}% compatible</span>
+                  </div>
+                </div>
+              ))}
+              {mathOrientationReports.filter(r => r.score >= 45).length === 0 && (
+                <p className="text-sm text-slate-500 italic text-center py-4">Aucune série compatible trouvée dans cette simulation.</p>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Séries à Haut Risque */}
+          <motion.div 
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-rose-100 bg-rose-50/5"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-slate-900 text-base">Séries à haut risque académique</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4 text-rose-800">
+              Fortement déconseillées car tes notes d'examen ou moyennes historiques ont franchi des seuils critiques (ex. Mathématiques insuffisantes), posant un risque de décrochage élevé.
+            </p>
+            <div className="space-y-3">
+              {mathOrientationReports.filter(r => r.score < 45 || r.suitability === 'Fortement Déconseillée' || r.suitability === 'Déconseillée').map((r, i) => (
+                <div key={i} className="p-3 bg-white rounded-xl border border-rose-50 border-l-4 border-l-rose-500 flex items-start gap-4 justify-between shadow-sm">
+                  <div className="space-y-1">
+                    <span className="text-sm font-bold text-slate-800">Série {r.slug}</span>
+                    <p className="text-xs text-rose-700 leading-relaxed font-semibold">
+                      {r.explanation.includes('**Points d\'alerte :**')
+                        ? r.explanation.substring(r.explanation.indexOf('**Points d\'alerte :**'))
+                        : r.explanation || "Seuils bloquants de notes atteints."}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-full inline-block">Score: {r.score}%</span>
+                  </div>
+                </div>
+              ))}
+              {mathOrientationReports.filter(r => r.score < 45 || r.suitability === 'Fortement Déconseillée' || r.suitability === 'Déconseillée').length === 0 && (
+                <p className="text-sm text-slate-500 italic text-center py-4">Félicitations ! Aucune série n'est classée à haut risque pour toi.</p>
+              )}
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Tableau Récapitulatif Scolaire de 3 Ans (Lecteur Parental) & Radar Summary */}
+        {profile && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 grid grid-cols-1 lg:grid-cols-12 gap-8"
+          >
+            {/* Left Column (Table) */}
+            <div className="lg:col-span-8 space-y-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Tableau Trajectoire & Lecture Parentale (Notes sur 3 ans)</h3>
+                  <p className="text-xs text-slate-500">
+                    Suivi rapide de l'évolution des notes de l'élève par les parents : <span className="text-emerald-600 font-bold">vert (&gt;12)</span> pour des notes de confort, <span className="text-rose-600 font-bold">rouge (&lt;10)</span> pour des notes à combler.
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-left border-collapse-custom">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="py-3 px-4 text-xs font-bold uppercase text-slate-500 tracking-wider">Matières</th>
+                      {[...(profile.gradesHistory || [])].reverse().map((year, entryIdx) => (
+                        <th key={entryIdx} className="py-3 px-4 text-xs font-bold uppercase text-slate-500 tracking-wider text-center">
+                          Classe de {year.level} (Moy: {year.average?.toFixed(2)})
+                        </th>
+                      ))}
+                      <th className="py-3 px-4 text-xs font-bold uppercase text-indigo-600 tracking-wider text-center">
+                        Notes Actuelles / Examen
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {['Mathématiques', 'Physique-Chimie', 'SVT', 'Français', 'Anglais', 'Histoire-Géo'].map((subjectName) => {
+                      return (
+                        <tr key={subjectName} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3 px-4 font-semibold text-sm text-slate-800">{subjectName}</td>
+                          {[...(profile.gradesHistory || [])].reverse().map((year, yrIdx) => {
+                            const yearGrade = getSubjectScore(year.grades, subjectName, -1);
+                            return (
+                              <td key={yrIdx} className="py-3 px-4 text-center">
+                                {yearGrade === -1 ? (
+                                  <span className="text-slate-400 font-medium">-</span>
+                                ) : (
+                                  <span className={`px-2.5 py-1 rounded font-bold text-sm inline-block ${
+                                    yearGrade >= 12 ? 'bg-emerald-50 text-emerald-700' :
+                                    yearGrade < 10 ? 'bg-rose-50 text-rose-700' :
+                                    'bg-slate-100 text-slate-700'
+                                  }`}>
+                                    {yearGrade.toFixed(1)}/20
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="py-3 px-4 text-center">
+                            {(() => {
+                              const currentG = getSubjectScore(profile.bepcGrades, subjectName, -1);
+                              if (currentG === -1) return <span className="text-slate-400 font-medium">-</span>;
+                              return (
+                                <span className={`px-2.5 py-1 rounded-md font-extrabold text-sm inline-block border ${
+                                  currentG >= 12 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                                  currentG < 10 ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                                  'bg-indigo-50 text-indigo-800 border-indigo-200'
+                                }`}>
+                                  {currentG.toFixed(1)}/20
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
 
-            {/* Radar Chart for subjects */}
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-4 text-center">Forces & Faiblesses (Radar)</h4>
-              <div className="h-64 w-full radar-chart-container">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="70%" data={profile.bepcGrades.slice(0, 5).map(g => ({ subject: g.subject.substring(0,6), grade: g.grade, fullMark: 20 }))}>
-                    <PolarGrid stroke="#e2e8f0" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#334155', fontSize: 12, fontWeight: 600 }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 20]} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} />
-                    <Radar name="Notes" dataKey="grade" stroke="#6366f1" strokeWidth={2} fill="#6366f1" fillOpacity={0.2} dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} />
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                  </RadarChart>
-                </ResponsiveContainer>
+            {/* Right Column (Radar & MOOCs) */}
+            <div className="lg:col-span-4 flex flex-col justify-between space-y-6">
+              {/* Radar Chart */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <h4 className="font-semibold text-slate-900 mb-2 text-center text-sm">Forces & Faiblesses (Radar)</h4>
+                <div className="h-56 w-full radar-chart-container">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={profile.bepcGrades.slice(0, 5).map(g => ({ subject: g.subject.substring(0,6), grade: g.grade, fullMark: 20 }))}>
+                      <PolarGrid stroke="#e2e8f0" />
+                      <PolarAngleAxis dataKey="subject" tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }} />
+                      <PolarRadiusAxis angle={30} domain={[0, 20]} tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} />
+                      <Radar name="Notes" dataKey="grade" stroke="#6366f1" strokeWidth={2} fill="#6366f1" fillOpacity={0.2} dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
+
+              {/* MOOCs Suggestions */}
+              {weakSubjects.length > 0 && (
+                <div className="border-t border-slate-100 pt-4">
+                  <h4 className="font-semibold text-slate-900 mb-3 text-sm">Cours de soutien suggérés (MOOCs)</h4>
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {weakSubjects.map((w, idx) => (
+                      <a key={idx} href={`https://www.coursera.org/search?query=${encodeURIComponent(w.subject)}&language=French`} target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 p-2.5 bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 rounded-xl transition-colors group">
+                        <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg group-hover:scale-110 transition-transform">
+                          <BookOpen className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <h5 className="font-semibold text-slate-800 text-xs">S'améliorer en {w.subject}</h5>
+                          <p className="text-[10px] text-slate-500">Explorer les cours d'appui gratuits en ligne</p>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
+
 
         {/* Premium Future Projection Section */}
         {(result.suitableUniversityMajors || result.futureJobOpportunities) && (

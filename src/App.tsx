@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { Header, Footer } from './components/Layout';
 import { Partners } from './components/Partners';
 import { Hero } from './components/Hero';
+import { SuccessStories } from './components/SuccessStories';
 import { ScholarshipLanding } from './components/ScholarshipLanding';
 import { UsefulLinksView } from './components/UsefulLinksView';
 import { AssessmentForm } from './components/AssessmentForm';
@@ -438,6 +439,7 @@ export default function App() {
             >
               <Hero onStart={handleStart} />
               <Partners />
+              <SuccessStories />
               <ScholarshipLanding onExplore={(query) => {
                 setView('scholarships');
                 window.scrollTo({ top: 0, behavior: 'smooth' });

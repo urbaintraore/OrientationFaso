@@ -13,7 +13,8 @@ import {
   Clock,
   ArrowRight,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Heart
 } from 'lucide-react';
 import { GovernmentOpportunity, GovernmentOpportunityType, GovernmentOpportunityStatus } from '../../types';
 import { governmentOpportunityService } from '../../services/governmentOpportunityService';
@@ -29,10 +30,22 @@ export const GovernmentOpportunities: React.FC<GovernmentOpportunitiesProps> = (
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | GovernmentOpportunityType>('all');
   const [selectedOpportunity, setSelectedOpportunity] = useState<GovernmentOpportunity | null>(null);
+  const [favoriteScholarships, setFavoriteScholarships] = useState<string[]>([]);
 
   useEffect(() => {
     fetchOpportunities();
+    const favs = localStorage.getItem('orientationbf_favorite_scholarships');
+    if (favs) setFavoriteScholarships(JSON.parse(favs));
   }, []);
+
+  const toggleFavorite = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newFavs = favoriteScholarships.includes(id) 
+      ? favoriteScholarships.filter(f => f !== id) 
+      : [...favoriteScholarships, id];
+    setFavoriteScholarships(newFavs);
+    localStorage.setItem('orientationbf_favorite_scholarships', JSON.stringify(newFavs));
+  };
 
   const fetchOpportunities = async () => {
     setLoading(true);
@@ -200,8 +213,17 @@ export const GovernmentOpportunities: React.FC<GovernmentOpportunitiesProps> = (
                   }`}>
                     {getTypeIcon(opp.type)}
                   </div>
-                  <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${getStatusColor(opp.status)}`}>
-                    {opp.status}
+                  <div className="flex flex-col items-end gap-2">
+                    <button 
+                      onClick={(e) => toggleFavorite(opp.id, e)}
+                      className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center transition-colors border border-slate-200"
+                      title="Ajouter aux favoris"
+                    >
+                      <Heart className={`w-4 h-4 ${favoriteScholarships.includes(opp.id) ? 'fill-rose-500 text-rose-500' : 'text-slate-400'}`} />
+                    </button>
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${getStatusColor(opp.status)}`}>
+                      {opp.status}
+                    </div>
                   </div>
                 </div>
 
