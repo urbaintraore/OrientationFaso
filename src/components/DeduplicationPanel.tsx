@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Layers, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { deduplicationService, DuplicateCluster } from '../services/deduplicationService';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 
 export const DeduplicationPanel = () => {
   const [clusters, setClusters] = useState<DuplicateCluster[]>([]);
@@ -83,6 +84,50 @@ export const DeduplicationPanel = () => {
           <CheckCircle className="w-8 h-8 mb-4" />
           <p className="font-bold text-lg">Base de données propre !</p>
           <p className="text-sm opacity-80 mt-1">Aucun doublon détecté pour le moment.</p>
+        </div>
+      )}
+
+      {clusters.length > 0 && (
+        <div className="mb-8 p-6 bg-slate-50 border border-slate-200 rounded-2xl">
+          <h3 className="font-bold text-slate-800 mb-4 text-center">Répartition des Doublons selon la similarité</h3>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={Object.entries(
+                    clusters.reduce((acc, c) => {
+                      const r = c.reason || 'Autre';
+                      if (!acc[r]) acc[r] = 0;
+                      acc[r] += c.duplicates.length;
+                      return acc;
+                    }, {} as Record<string, number>)
+                  ).map(([name, value]) => ({ name, value }))}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {
+                    Object.keys(
+                      clusters.reduce((acc, c) => {
+                        const r = c.reason || 'Autre';
+                        if (!acc[r]) acc[r] = 0;
+                        acc[r] += c.duplicates.length;
+                        return acc;
+                      }, {} as Record<string, number>)
+                    ).map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={['#f43f5e', '#ec4899', '#d946ef', '#a855f7', '#6366f1'][index % 5]} />
+                    ))
+                  }
+                </Pie>
+                <RechartsTooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
 

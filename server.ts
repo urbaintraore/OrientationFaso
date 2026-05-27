@@ -107,12 +107,69 @@ app.post("/api/gemini/crawl-career-opportunities", async (req, res) => {
 });
 
 app.post("/api/gemini/extract-academic-data", async (req, res) => {
+  const { rawContent, sourceUrl } = req.body;
+  let crawledText = rawContent || "";
+  let logDetails = {
+    url: sourceUrl || "Inconnue",
+    statusCode: 200,
+    errorMessage: null as string | null,
+    academicContentDetected: false,
+    timestamp: new Date().toISOString(),
+    success: true,
+    scrapedLength: 0
+  };
+
+  if (sourceUrl && sourceUrl.startsWith("http")) {
+    try {
+      console.log(`[Crawler] Scraping academic target: ${sourceUrl}`);
+      const agent = new https.Agent({ rejectUnauthorized: false });
+      const response = await axios.get(sourceUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 aistudio-build',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Cache-Control': 'no-cache'
+        },
+        httpsAgent: agent,
+        timeout: 10000,
+        maxRedirects: 5
+      });
+
+      logDetails.statusCode = response.status;
+      const $ = cheerio.load(response.data);
+      
+      // Remove noise to keep content high-fidelity
+      $('script, style, iframe, nav, footer, header').remove();
+      const rawText = $('body').text().replace(/\s+/g, ' ').trim();
+      crawledText = rawText.slice(0, 30000);
+      logDetails.scrapedLength = crawledText.length;
+
+      // Simple AI classification and verification parameter
+      const keywords = ['universite', 'university', 'ecole', 'institut', 'scolaire', 'academique', 'etudiant', 'programs', 'diplome', 'cours', 'licence', 'master', 'filiere'];
+      const hasKeywords = keywords.some(kw => rawText.toLowerCase().includes(kw));
+      logDetails.academicContentDetected = hasKeywords;
+
+      console.log(`[Crawler] Successfully scraped ${crawledText.length} characters.`);
+    } catch (e: any) {
+      console.error(`[Crawler] Scraper error for ${sourceUrl}: ${e.message}`);
+      logDetails.success = false;
+      logDetails.statusCode = e.response?.status || 500;
+      logDetails.errorMessage = e.message;
+      
+      if (!crawledText) {
+        crawledText = `Erreur de chargement du site: ${e.message}. Veuillez utiliser les informations par défaut ou extraire via l'IA.`;
+      }
+    }
+  }
+
   try {
-    const { rawContent, sourceUrl } = req.body;
-    const result = await extractAcademicData(rawContent, sourceUrl);
-    res.json(result);
+    const result = await extractAcademicData(crawledText, sourceUrl || "");
+    res.json({
+      ...result,
+      _crawlerLog: logDetails
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, _crawlerLog: { ...logDetails, success: false, errorMessage: err.message } });
   }
 });
 

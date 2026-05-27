@@ -19,7 +19,8 @@ const trimesterSchema = z.object({
 const yearSchema = z.object({
   avg: trimesterSchema,
   math: trimesterSchema,
-  pc: trimesterSchema,
+  physique: trimesterSchema,
+  chimie: trimesterSchema,
   svt: trimesterSchema,
   fr: trimesterSchema,
   eng: trimesterSchema,
@@ -30,7 +31,8 @@ const yearSchema = z.object({
 const examSchema = z.object({
   avg: gradeSchema,
   math: gradeSchema,
-  pc: gradeSchema,
+  physique: gradeSchema,
+  chimie: gradeSchema,
   svt: gradeSchema,
   fr: gradeSchema,
   eng: gradeSchema,
@@ -110,7 +112,8 @@ export function PostBacForm({ onSubmit, isLoading }: PostBacFormProps) {
         average: calcAvg(data.grade2nd.avg),
         grades: [
           { subject: 'Mathématiques', grade: calcAvg(data.grade2nd.math) },
-          { subject: 'Physique-Chimie', grade: calcAvg(data.grade2nd.pc) },
+          { subject: 'Physique', grade: calcAvg(data.grade2nd.physique) },
+          { subject: 'Chimie', grade: calcAvg(data.grade2nd.chimie) },
           { subject: 'SVT', grade: calcAvg(data.grade2nd.svt) },
           { subject: 'Français', grade: calcAvg(data.grade2nd.fr) },
           { subject: 'Anglais', grade: calcAvg(data.grade2nd.eng) },
@@ -123,7 +126,8 @@ export function PostBacForm({ onSubmit, isLoading }: PostBacFormProps) {
         average: calcAvg(data.grade1st.avg),
         grades: [
           { subject: 'Mathématiques', grade: calcAvg(data.grade1st.math) },
-          { subject: 'Physique-Chimie', grade: calcAvg(data.grade1st.pc) },
+          { subject: 'Physique', grade: calcAvg(data.grade1st.physique) },
+          { subject: 'Chimie', grade: calcAvg(data.grade1st.chimie) },
           { subject: 'SVT', grade: calcAvg(data.grade1st.svt) },
           { subject: 'Français', grade: calcAvg(data.grade1st.fr) },
           { subject: 'Anglais', grade: calcAvg(data.grade1st.eng) },
@@ -136,7 +140,8 @@ export function PostBacForm({ onSubmit, isLoading }: PostBacFormProps) {
         average: calcAvg(data.gradeTerm.avg),
         grades: [
           { subject: 'Mathématiques', grade: calcAvg(data.gradeTerm.math) },
-          { subject: 'Physique-Chimie', grade: calcAvg(data.gradeTerm.pc) },
+          { subject: 'Physique', grade: calcAvg(data.gradeTerm.physique) },
+          { subject: 'Chimie', grade: calcAvg(data.gradeTerm.chimie) },
           { subject: 'SVT', grade: calcAvg(data.gradeTerm.svt) },
           { subject: 'Français', grade: calcAvg(data.gradeTerm.fr) },
           { subject: 'Anglais', grade: calcAvg(data.gradeTerm.eng) },
@@ -148,7 +153,8 @@ export function PostBacForm({ onSubmit, isLoading }: PostBacFormProps) {
 
     const bacGrades: GradeEntry[] = [
       { subject: 'Mathématiques', grade: data.bac.math || 0 },
-      { subject: 'Physique-Chimie', grade: data.bac.pc || 0 },
+      { subject: 'Physique', grade: data.bac.physique || 0 },
+      { subject: 'Chimie', grade: data.bac.chimie || 0 },
       { subject: 'SVT', grade: data.bac.svt || 0 },
       { subject: 'Français', grade: data.bac.fr || 0 },
       { subject: 'Anglais', grade: data.bac.eng || 0 },
@@ -182,7 +188,7 @@ export function PostBacForm({ onSubmit, isLoading }: PostBacFormProps) {
       if (!values) return '-';
       let sum = 0;
       let count = 0;
-      const subjects = ['math', 'pc', 'svt', 'fr', 'eng', 'hg'];
+      const subjects = ['math', 'physique', 'chimie', 'svt', 'fr', 'eng', 'hg'];
       if (hasPhilo) subjects.push('philo');
 
       subjects.forEach(sub => {
@@ -235,13 +241,21 @@ export function PostBacForm({ onSubmit, isLoading }: PostBacFormProps) {
           {errorPrefix?.[prefix]?.avg && <div className="text-xs text-red-500 text-right">Moyenne requise</div>}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {['Math', 'PC', 'SVT', 'Fr', 'Eng', 'HG'].map((subj) => (
-                  <div key={subj}>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">{subj}</label>
+              {[
+                { name: 'math', label: 'Mathématiques' },
+                { name: 'physique', label: 'Physique' },
+                { name: 'chimie', label: 'Chimie' },
+                { name: 'svt', label: 'SVT' },
+                { name: 'fr', label: 'Français' },
+                { name: 'eng', label: 'Anglais' },
+                { name: 'hg', label: 'Histoire-Géo' }
+              ].map((subj) => (
+                  <div key={subj.name}>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">{subj.label}</label>
                       <input
                           type="number"
                           step="0.01"
-                          {...register(`${prefix}.${subj.toLowerCase()}.${activeTab}` as any, { valueAsNumber: true })}
+                          {...register(`${prefix}.${subj.name}.${activeTab}` as any, { valueAsNumber: true })}
                           className="w-full rounded-lg border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
                           placeholder="Note"
                       />
@@ -249,7 +263,7 @@ export function PostBacForm({ onSubmit, isLoading }: PostBacFormProps) {
               ))}
               {hasPhilo && (
                   <div key="Philo">
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Philo</label>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Philosophie</label>
                       <input
                           type="number"
                           step="0.01"
@@ -279,20 +293,28 @@ export function PostBacForm({ onSubmit, isLoading }: PostBacFormProps) {
           />
           {errorPrefix?.[prefix]?.avg && <span className="text-xs text-red-500">Requis</span>}
         </div>
-        {['Math', 'PC', 'SVT', 'Fr', 'Eng', 'HG'].map((subj) => (
-          <div key={subj}>
-            <label className="mb-1 block text-xs font-medium text-slate-500">{subj}</label>
+        {[
+          { name: 'math', label: 'Mathématiques' },
+          { name: 'physique', label: 'Physique' },
+          { name: 'chimie', label: 'Chimie' },
+          { name: 'svt', label: 'SVT' },
+          { name: 'fr', label: 'Français' },
+          { name: 'eng', label: 'Anglais' },
+          { name: 'hg', label: 'Histoire-Géo' }
+        ].map((subj) => (
+          <div key={subj.name}>
+            <label className="mb-1 block text-xs font-medium text-slate-500">{subj.label}</label>
             <input
               type="number"
               step="0.01"
-              {...register(`${prefix}.${subj.toLowerCase()}` as any, { valueAsNumber: true })}
+              {...register(`${prefix}.${subj.name}` as any, { valueAsNumber: true })}
               className="w-full rounded-lg border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
             />
           </div>
         ))}
         {hasPhilo && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Philo</label>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Philosophie</label>
             <input
               type="number"
               step="0.01"

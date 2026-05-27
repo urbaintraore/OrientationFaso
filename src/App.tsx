@@ -24,6 +24,7 @@ import { InstitutionDetails } from './components/marketplace/InstitutionDetails'
 import { EstablishmentDashboard } from './components/establishment/EstablishmentDashboard';
 import { ScholarshipHub } from './components/opportunities/ScholarshipHub';
 import { AboutPage } from './components/AboutPage';
+import { LiveChatWidget } from './components/LiveChatWidget';
 import { analyzeProfile, analyzePostBacProfile } from './services/gemini';
 import { careerGatheringService } from './services/careerGatheringService';
 import { StudentProfile, AnalysisResult, PostBacProfile, UniversityAnalysisResult, SavedProject, UserProfile } from './types';
@@ -752,12 +753,15 @@ export default function App() {
         }}
       />
 
+      {/* Live Chat & Support Support Widgets */}
+      <LiveChatWidget />
+
       {/* WhatsApp Floating Button */}
       <a
         href="https://wa.me/22663375257"
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 p-4 bg-[#25D366] text-white rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center group"
+        className="fixed bottom-6 left-6 z-50 p-4 bg-[#25D366] text-white rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center group"
         title="Contactez-nous sur WhatsApp"
       >
         <svg 

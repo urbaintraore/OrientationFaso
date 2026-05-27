@@ -2,12 +2,19 @@ import React, { useRef } from 'react';
 import { 
   BarChart, 
   Bar, 
+  LineChart,
+  Line,
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  Cell
+  Cell,
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis
 } from 'recharts';
 import { motion } from 'motion/react';
 import { 
@@ -34,6 +41,7 @@ import { StudentProfile, AnalysisResult } from '../types';
 import { clsx } from 'clsx';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { RecommendationRating } from './RecommendationRating';
 
 interface ResultsDashboardProps {
   result: AnalysisResult;
@@ -88,6 +96,37 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
       navigator.clipboard.writeText(text);
       alert('Résultat copié dans le presse-papier !');
     }
+  };
+
+  const handleDownloadCSV = () => {
+    if (!profile) return;
+    
+    let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+    csvContent += "Informations Personnelles\n";
+    csvContent += `Nom,"${profile.name}"\n`;
+    csvContent += `Âge,"${profile.age}"\n`;
+    csvContent += `Sexe,"${profile.gender}"\n`;
+    csvContent += `École,"${profile.school}"\n\n`;
+
+    csvContent += "Historique des Moyennes\n";
+    csvContent += "Niveau,Moyenne Générale\n";
+    (profile.gradesHistory || []).forEach(history => {
+      csvContent += `"${history.level}",${history.average}\n`;
+    });
+    
+    csvContent += `\nNotes à l'examen (BEPC)\n`;
+    csvContent += "Matière,Note\n";
+    (profile.bepcGrades || []).forEach((g: any) => {
+      csvContent += `"${g.subject}",${g.grade}\n`;
+    });
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `profil_${profile.name.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleDownloadPDF = async () => {
@@ -154,7 +193,7 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
         <h2 className="text-3xl font-bold text-slate-900 mb-2">Résultat de l'Orientation</h2>
         <p className="text-slate-600 mb-6">Basé sur l'analyse de ton profil scolaire et de tes ambitions.</p>
         
-        <div className="flex justify-center gap-4">
+        <div className="flex justify-center gap-4 action-buttons-container">
           <button 
             onClick={handleShare}
             className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
@@ -172,11 +211,18 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
             </button>
           )}
           <button
+            onClick={handleDownloadCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors shadow-sm"
+            title="Exporter au format CSV"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+          <button
             onClick={hasPaid ? handleDownloadPDF : onUpgrade}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
           >
             {hasPaid ? <Download className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-            {hasPaid ? "Télécharger le rapport" : "Rapport complet (Premium)"}
+            {hasPaid ? "Imprimer Rapport" : "Rapport complet (Premium)"}
           </button>
         </div>
       </div>
@@ -201,9 +247,9 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
             </p>
           </div>
           
-          <div className="p-8 grid md:grid-cols-3 gap-8">
+          <div className="p-8 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-6 results-dashboard-grid">
             {/* Probability Stats */}
-            <div className="space-y-6">
+            <div className="space-y-6 md:col-span-2 lg:col-span-4">
               <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 relative overflow-hidden">
                 {!hasPaid && <PremiumOverlay onUpgrade={onUpgrade} />}
                 <div className="flex items-center justify-between mb-2">
@@ -211,9 +257,9 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
                   <CheckCircle className="w-5 h-5 text-green-500" />
                 </div>
                 <div className="text-3xl font-bold text-slate-900">{result.bacSuccessProbability || 0}%</div>
-                <div className="w-full bg-slate-200 rounded-full h-2 mt-2">
+                <div className="w-full bg-slate-200 rounded-full h-2 mt-2 progress-bar-container">
                   <div 
-                    className="bg-green-500 h-2 rounded-full transition-all duration-1000" 
+                    className="bg-green-500 h-2 rounded-full transition-all duration-[1500ms] ease-out flex items-center justify-end" 
                     style={{ width: `${result.bacSuccessProbability || 0}%` }}
                   />
                 </div>
@@ -225,9 +271,9 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
                   <Trophy className="w-5 h-5 text-amber-500" />
                 </div>
                 <div className="text-3xl font-bold text-slate-900">{result.bacMentionProbability || 0}%</div>
-                <div className="w-full bg-slate-200 rounded-full h-2 mt-2">
+                <div className="w-full bg-slate-200 rounded-full h-2 mt-2 progress-bar-container">
                   <div 
-                    className="bg-amber-500 h-2 rounded-full transition-all duration-1000" 
+                    className="bg-amber-500 h-2 rounded-full transition-all duration-[1500ms] ease-out flex items-center justify-end" 
                     style={{ width: `${result.bacMentionProbability || 0}%` }}
                   />
                 </div>
@@ -248,7 +294,7 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
             </div>
 
             {/* Chart */}
-            <div className="md:col-span-2 bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col">
+            <div className="md:col-span-2 lg:col-span-8 bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col">
               <h4 className="font-semibold text-slate-900 mb-6">Comparatif des meilleures options</h4>
               <div className="flex-1 min-h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -278,41 +324,59 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.15 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100"
+            className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 grid md:grid-cols-2 gap-8"
           >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-slate-100 text-slate-600 rounded-lg">
-                <GraduationCap className="w-5 h-5" />
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-slate-100 text-slate-600 rounded-lg">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <h3 className="font-semibold text-slate-900">Rappel de tes résultats (BEPC)</h3>
               </div>
-              <h3 className="font-semibold text-slate-900">Rappel de tes résultats (BEPC)</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <div className="text-xs text-slate-500 mb-1">Moyenne BEPC</div>
+                  <div className="text-lg font-bold text-slate-900">{profile.bepcAverage}/20</div>
+                </div>
+                {profile.bepcGrades.map((grade, i) => (
+                  <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="text-xs text-slate-500 mb-1 truncate" title={grade.subject}>{grade.subject}</div>
+                    <div className="text-lg font-bold text-slate-900">{grade.grade}/20</div>
+                  </div>
+                ))}
+                {profile.transcriptUrl && (
+                  <a 
+                    href={profile.transcriptUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 flex flex-col items-center justify-center hover:bg-indigo-100 transition-colors group"
+                  >
+                    <div className="text-[10px] text-indigo-500 font-bold uppercase mb-1 flex items-center gap-1">
+                      Relevé <ExternalLink className="w-2 h-2" />
+                    </div>
+                    <div className="text-indigo-700">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                  </a>
+                )}
+              </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="text-xs text-slate-500 mb-1">Moyenne BEPC</div>
-                <div className="text-lg font-bold text-slate-900">{profile.bepcAverage}/20</div>
+
+            {/* Radar Chart for subjects */}
+            <div>
+              <h4 className="font-semibold text-slate-900 mb-4 text-center">Forces & Faiblesses (Radar)</h4>
+              <div className="h-64 w-full radar-chart-container">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart cx="50%" cy="50%" outerRadius="70%" data={profile.bepcGrades.slice(0, 5).map(g => ({ subject: g.subject.substring(0,6), grade: g.grade, fullMark: 20 }))}>
+                    <PolarGrid stroke="#e2e8f0" />
+                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#334155', fontSize: 12, fontWeight: 600 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 20]} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} />
+                    <Radar name="Notes" dataKey="grade" stroke="#6366f1" strokeWidth={2} fill="#6366f1" fillOpacity={0.2} dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  </RadarChart>
+                </ResponsiveContainer>
               </div>
-              {profile.bepcGrades.map((grade, i) => (
-                <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="text-xs text-slate-500 mb-1 truncate" title={grade.subject}>{grade.subject}</div>
-                  <div className="text-lg font-bold text-slate-900">{grade.grade}/20</div>
-                </div>
-              ))}
-            {profile.transcriptUrl && (
-              <a 
-                href={profile.transcriptUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 flex flex-col items-center justify-center hover:bg-indigo-100 transition-colors group"
-              >
-                <div className="text-[10px] text-indigo-500 font-bold uppercase mb-1 flex items-center gap-1">
-                  Relevé <ExternalLink className="w-2 h-2" />
-                </div>
-                <div className="text-indigo-700">
-                  <FileText className="w-5 h-5" />
-                </div>
-              </a>
-            )}
-          </div>
+            </div>
           </motion.div>
         )}
 
@@ -412,6 +476,25 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
               <div>
                 <div className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Progression</div>
                 <p className="text-slate-700 text-sm">{result.analysis?.progression || "N/A"}</p>
+              </div>
+            </div>
+
+            <div className="md:col-span-2 mt-4 border-t border-slate-100 pt-6 chart-container">
+              <h4 className="font-semibold text-slate-900 mb-4 text-center">Évolution de la Moyenne</h4>
+              <div className="h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={[...(profile?.gradesHistory || [])].reverse()}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="level" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 20]} tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                      formatter={(value: any) => [`${value} / 20`, 'Moyenne']}
+                      labelStyle={{ color: '#64748b', fontWeight: 500, marginBottom: '4px' }}
+                    />
+                    <Line type="monotone" dataKey="average" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </motion.div>
@@ -527,6 +610,12 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
           </motion.div>
         )}
       </div>
+
+      <RecommendationRating 
+        recommendationType="bepc"
+        recommendationTitle={result.recommendedSeries || "Série d'orientation"}
+        userId={profile?.name}
+      />
 
       <div className="flex justify-center pt-8">
         <button

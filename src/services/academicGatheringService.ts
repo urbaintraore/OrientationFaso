@@ -49,15 +49,39 @@ export const academicGatheringService = {
     try {
       if (!data.institution.name) throw new Error("Nom de l'établissement manquant.");
 
-      // 1. Check if institution exists with a more robust check (normalized name + city)
-      const normalizedName = normalizeString(data.institution.name);
+      const { normalizeName, normalizeDomain, generateSlug } = await import("./institutionService");
+
+      // Save crawler log if present
+      const logDetails = (data as any)._crawlerLog;
+      if (logDetails) {
+        try {
+          await addDoc(collection(db, 'crawler_logs'), {
+            ...logDetails,
+            institutionName: data.institution.name,
+            timestamp: serverTimestamp()
+          });
+        } catch (logErr) {
+          console.warn("Failed to write crawler log to Firestore:", logErr);
+        }
+      }
+
+      // 1. Check if institution exists with a more robust check (normalized name + website domain)
+      const normalizedName = normalizeName(data.institution.name);
+      const normalizedDomain = data.institution.website ? normalizeDomain(data.institution.website) : "";
+      
       const institutionsQuery = query(collection(db, 'institutions'));
       const institutionsSnap = await getDocs(institutionsQuery);
       
       let existingInstDoc = institutionsSnap.docs.find(doc => {
         const d = doc.data();
-        return (normalizeString(d.name || '') === normalizedName) || 
-               (d.website && data.institution.website && d.website.includes(new URL(data.institution.website).hostname));
+        const dNormName = d.normalized_name || normalizeName(d.name || '');
+        const dNormDomain = d.normalized_domain || (d.website ? normalizeDomain(d.website) : "");
+        
+        // Exact name match, domain match, or aliases check
+        if (dNormName === normalizedName) return true;
+        if (normalizedDomain && dNormDomain && dNormDomain === normalizedDomain) return true;
+        if (d.aliases && d.aliases.includes(data.institution.name)) return true;
+        return false;
       });
       
       let institutionId: string;
@@ -65,7 +89,7 @@ export const academicGatheringService = {
       if (!existingInstDoc) {
         institutionId = await institutionService.addInstitution({
           ...data.institution,
-          logo: data.institution.website ? `https://logo.clearbit.com/${new URL(data.institution.website).hostname}` : 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1200',
+          logo: data.institution.website ? `https://logo.clearbit.com/${normalizeDomain(data.institution.website)}` : 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1200',
           coverImage: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1200',
           isVerified: false,
           tier: 'Free',
@@ -89,7 +113,7 @@ export const academicGatheringService = {
           programsCount: Math.max((data.institution.programsCount || 0), (existingInstDoc.data().programsCount || 0)),
           degrees: Array.from(new Set([...(data.institution.degrees || []), ...(existingInstDoc.data().degrees || [])])),
           socialLinks: { ...existingInstDoc.data().socialLinks, ...data.institution.socialLinks }
-        });
+        }, true);
       }
 
       // 2. Add programs with duplicate check per institution
@@ -120,7 +144,7 @@ export const academicGatheringService = {
       const finalCountSnap = await getDocs(finalCountQuery);
       await institutionService.updateInstitution(institutionId, { 
         programsCount: finalCountSnap.size
-      });
+      }, true);
       
       return institutionId;
     } catch (error) {
@@ -153,7 +177,7 @@ export const academicGatheringService = {
         }
         
         const updatedData = await response.json();
-        await institutionService.updateInstitution(docSnap.id, updatedData);
+        await institutionService.updateInstitution(docSnap.id, updatedData, true);
         results.updated++;
       } catch (e: any) {
         console.error(`Failed to refresh ${inst.name}`, e);
@@ -241,7 +265,7 @@ export const academicGatheringService = {
     for (const primary of uniqueMap.values()) {
       const countQuery = query(collection(db, 'programs'), where('institutionId', '==', primary.id));
       const countSnap = await getDocs(countQuery);
-      await institutionService.updateInstitution(primary.id, { programsCount: countSnap.size });
+      await institutionService.updateInstitution(primary.id, { programsCount: countSnap.size }, true);
     }
 
     return { removed: mergedCount };

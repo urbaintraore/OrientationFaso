@@ -18,6 +18,47 @@ import { handleFirestoreError, OperationType } from '../lib/firebase';
 
 const COLLECTION_NAME = 'institutions';
 
+export function normalizeName(name: string): string {
+  if (!name) return "";
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // remove accents
+    .replace(/[^a-z0-9]/g, " ")     // replace special chars with space
+    .replace(/\s+/g, " ")           // remove redundant spaces
+    .trim();
+}
+
+export function extractAcronym(name: string): string {
+  const norm = normalizeName(name);
+  const stopWords = ['de', 'des', 'la', 'le', 'l', 'd', 'et', 'en', 'pour', 'au', 'du', 'sur', 'sous', 'dans', 'of', 'the', 'and', 'for', 'in', 'at', 'on', 'a'];
+  const words = norm.split(' ').filter(w => !stopWords.includes(w) && w.length > 0);
+  return words.map(w => w[0]).join('').toLowerCase();
+}
+
+export function normalizeDomain(url: string): string {
+  if (!url) return "";
+  let cleanUrl = url.trim().toLowerCase();
+  if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
+    cleanUrl = "https://" + cleanUrl;
+  }
+  try {
+    const parsed = new URL(cleanUrl);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch (e) {
+    return cleanUrl.replace(/^(https?:\/\/)?(www\.)?/, "").split("/")[0];
+  }
+}
+
+export function generateSlug(name: string, city: string = ""): string {
+  const norm = normalizeName(name);
+  let base = norm.replace(/\s+/g, "-");
+  if (city) {
+    base += "-" + normalizeName(city).replace(/\s+/g, "-");
+  }
+  return base;
+}
+
 export const institutionService = {
   async getAllInstitutions(filters?: { country?: string; type?: string; city?: string }) {
     try {
@@ -85,8 +126,15 @@ export const institutionService = {
 
   async addInstitution(institution: Omit<Institution, 'id'>) {
     try {
+      const normName = normalizeName(institution.name);
+      const normDomain = institution.website ? normalizeDomain(institution.website) : "";
+      const slug = generateSlug(institution.name, institution.city);
       const docRef = await addDoc(collection(db, COLLECTION_NAME), {
         ...institution,
+        normalized_name: normName,
+        normalized_domain: normDomain,
+        slug: slug,
+        aliases: institution.aliases || [],
         createdAt: serverTimestamp(),
       });
       return docRef.id;
@@ -96,11 +144,45 @@ export const institutionService = {
     }
   },
 
-  async updateInstitution(id: string, data: Partial<Institution>) {
+  async updateInstitution(id: string, data: Partial<Institution>, isAutomatedScript: boolean = false) {
     try {
       const docRef = doc(db, COLLECTION_NAME, id);
+      const updateData: any = { ...data };
+      
+      // If this is an automated script, prevent overwriting manually verified fields
+      if (isAutomatedScript) {
+        const existingData = await this.getInstitutionById(id);
+        if (existingData && existingData.isVerified) {
+          // Selectively merge: only update fields that are currently empty/null/undefined in the verified record
+          // or fields that are lists where we can append non-destructively (optional, keeping it simple to just not overwrite existing scalars)
+          Object.keys(data).forEach((key) => {
+            const typedKey = key as keyof Institution;
+            const existingVal = existingData[typedKey];
+            const newVal = data[typedKey];
+            
+            // Skip overwriting if the existing value is truthy (or explicitly false but defined), 
+            // arrays should probably be merged if needed, but for scalar values it's strict:
+            if (existingVal !== undefined && existingVal !== null && existingVal !== "" && (Array.isArray(existingVal) ? existingVal.length > 0 : true)) {
+              delete updateData[typedKey];
+            }
+          });
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        console.log(`Skipped update for ${id} (no new valid automated data to merge)`);
+        return;
+      }
+
+      if (updateData.name) {
+        updateData.normalized_name = normalizeName(updateData.name);
+        updateData.slug = generateSlug(updateData.name, updateData.city || "");
+      }
+      if (updateData.website) {
+        updateData.normalized_domain = normalizeDomain(updateData.website);
+      }
       await updateDoc(docRef, {
-        ...data,
+        ...updateData,
         updatedAt: serverTimestamp(),
       });
     } catch (error) {

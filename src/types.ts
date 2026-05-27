@@ -266,6 +266,10 @@ export interface Institution {
   isVerified: boolean;
   specialOffer?: string;
   aiSuccessIndex?: number; // Calculated dynamically match with user
+  normalized_name?: string;
+  normalized_domain?: string;
+  slug?: string;
+  aliases?: string[];
 }
 
 export interface UniversityMajorRecommendation {

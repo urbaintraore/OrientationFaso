@@ -4,7 +4,7 @@ import { Users, CreditCard, CheckCircle, XCircle, Search, Trash2, Plus, X, Eye, 
 import { AnalysisResult, UniversityAnalysisResult, GovernmentOpportunity } from '../types';
 import { mockInstitutions } from '../data/mockInstitutions';
 import { jsPDF } from 'jspdf';
-import { collection, getDocs, query, orderBy, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { CareerOpportunity } from '../types';
 import { academicGatheringService } from '../services/academicGatheringService';
@@ -16,6 +16,8 @@ import { crawlInstitutions } from '../services/gemini';
 import { deduplicationService, DuplicateCluster } from '../services/deduplicationService';
 import { DeduplicationPanel } from './DeduplicationPanel';
 import { UsefulLinksPanel } from './UsefulLinksPanel';
+import { DiagnosticPanel } from './DiagnosticPanel';
+import { institutionService } from '../services/institutionService';
 import { Layers } from 'lucide-react';
 
 // Mock data for users with more details
@@ -395,6 +397,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [users, setUsers] = useState(INITIAL_USERS);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [institutions, setInstitutions] = useState<any[]>([]);
+  const [deletedInstitutionIds, setDeletedInstitutionIds] = useState<string[]>([]);
   const [loadingInstitutions, setLoadingInstitutions] = useState(false);
   const [duplicateCount, setDuplicateCount] = useState(0);
 
@@ -425,6 +428,155 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
     } finally {
       setLoadingInstitutions(false);
     }
+  };
+
+  const handleDeleteInstitution = async (id: string, name: string) => {
+    setConfirmDialog({
+      message: `Êtes-vous sûr de vouloir supprimer l'établissement "${name}" ?`,
+      onConfirm: async () => {
+        try {
+          if (!id.toString().startsWith('inst-')) {
+            await deleteDoc(doc(db, 'institutions', id));
+          }
+          setDeletedInstitutionIds(prev => [...prev, id.toString()]);
+          setNotification({ message: `L'établissement "${name}" a été supprimé avec succès.`, type: 'success' });
+          await fetchRealInstitutions();
+        } catch (e) {
+          console.error("Error deleting institution:", e);
+          setNotification({ message: "Erreur lors de la suppression de l'établissement.", type: 'error' });
+        }
+        setConfirmDialog(null);
+      }
+    });
+  };
+
+  const handleManageInstitution = (inst: any) => {
+    setEditingInstitution({
+      ...inst,
+      programs: inst.programs || [],
+      address: inst.address || '',
+      phone: inst.phone || '',
+      email: inst.email || '',
+      description: inst.description || '',
+      website: inst.website || '',
+      city: inst.city || '',
+      country: inst.country || 'Burkina Faso',
+      establishedYear: inst.establishedYear || 2000,
+      studentCount: inst.studentCount || 0
+    });
+    setInstitutionsModalTab('info');
+    setShowProgramForm(false);
+    setCurrentProgramIndex(null);
+  };
+
+  const handleUpdateInstitutionDetails = async () => {
+    if (!editingInstitution) return;
+    if (!editingInstitution.name) {
+      setNotification({ message: "Le nom de l'établissement est requis.", type: 'error' });
+      return;
+    }
+    setSavingInstitution(true);
+    try {
+      await institutionService.updateInstitution(editingInstitution.id, {
+        name: editingInstitution.name,
+        type: editingInstitution.type,
+        city: editingInstitution.city,
+        country: editingInstitution.country,
+        address: editingInstitution.address,
+        website: editingInstitution.website,
+        phone: editingInstitution.phone,
+        email: editingInstitution.email,
+        description: editingInstitution.description,
+        programs: editingInstitution.programs,
+        logo: editingInstitution.logo,
+        coverImage: editingInstitution.coverImage,
+        establishedYear: Number(editingInstitution.establishedYear) || 2000,
+        studentCount: Number(editingInstitution.studentCount) || 0
+      });
+      setNotification({ message: `L'établissement "${editingInstitution.name}" a été mis à jour avec succès !`, type: 'success' });
+      setEditingInstitution(null);
+      await fetchRealInstitutions();
+    } catch (e: any) {
+      console.error(e);
+      setNotification({ message: `Erreur lors de la mise à jour : ${e.message}`, type: 'error' });
+    } finally {
+      setSavingInstitution(false);
+    }
+  };
+
+  const handleProgramSave = () => {
+    if (!tempProgram.name) {
+      alert("Le nom de la filière est requis.");
+      return;
+    }
+    if (!editingInstitution) return;
+    
+    const updatedPrograms = [...editingInstitution.programs];
+    if (currentProgramIndex !== null) {
+      updatedPrograms[currentProgramIndex] = { ...tempProgram };
+    } else {
+      updatedPrograms.push({ ...tempProgram, id: 'prog-' + Date.now().toString() });
+    }
+    
+    setEditingInstitution({
+      ...editingInstitution,
+      programs: updatedPrograms
+    });
+    setShowProgramForm(false);
+    setCurrentProgramIndex(null);
+  };
+
+  const handleProgramDelete = (index: number) => {
+    setConfirmDialog({
+      message: "Voulez-vous vraiment supprimer cette filière ?",
+      onConfirm: () => {
+        if (!editingInstitution) {
+          setConfirmDialog(null);
+          return;
+        }
+        const updatedPrograms = editingInstitution.programs.filter((_: any, i: number) => i !== index);
+        setEditingInstitution({
+          ...editingInstitution,
+          programs: updatedPrograms
+        });
+        setConfirmDialog(null);
+      }
+    });
+  };
+
+  const handleProgramEditStart = (index: number) => {
+    const prog = editingInstitution.programs[index];
+    setTempProgram({
+      name: prog.name || '',
+      field: prog.field || '',
+      description: prog.description || '',
+      duration: prog.duration || '3 ans',
+      degreeLevel: prog.degreeLevel || 'Licence',
+      tuitionFee: prog.tuitionFee || 0,
+      careerOpportunities: prog.careerOpportunities || [],
+      employmentTrend: prog.employmentTrend || 'Stable',
+      employmentScore: prog.employmentScore || 80,
+      averageSalary: prog.averageSalary || 'Non spécifié'
+    });
+    setCurrentProgramIndex(index);
+    setShowProgramForm(true);
+  };
+
+  const handleProgramAddStart = () => {
+    setTempProgram({
+      name: '',
+      field: '',
+      description: '',
+      duration: '3 ans',
+      degreeLevel: 'Licence',
+      tuitionFee: 0,
+      careerOpportunities: [],
+      employmentTrend: 'Stable',
+      employmentScore: 80,
+      averageSalary: 'Non spécifié'
+    });
+    setCurrentProgramIndex(null);
+    setShowProgramForm(true);
   };
 
   const fetchRealUsers = async () => {
@@ -477,8 +629,28 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   };
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'users' | 'payments' | 'institutions' | 'notifications' | 'intelligence' | 'gov_sync' | 'deduplication' | 'links' | 'concours'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'payments' | 'institutions' | 'notifications' | 'intelligence' | 'gov_sync' | 'deduplication' | 'links' | 'concours' | 'diagnostic'>('users');
   
+  // Institution & program management states
+  const [editingInstitution, setEditingInstitution] = useState<any | null>(null);
+  const [institutionsModalTab, setInstitutionsModalTab] = useState<'info' | 'location' | 'desc' | 'programs'>('info');
+  const [savingInstitution, setSavingInstitution] = useState(false);
+  const [showProgramForm, setShowProgramForm] = useState(false);
+  const [currentProgramIndex, setCurrentProgramIndex] = useState<number | null>(null);
+  const [tempProgram, setTempProgram] = useState({
+    name: '',
+    field: '',
+    description: '',
+    duration: '3 ans',
+    degreeLevel: 'Licence',
+    tuitionFee: 0,
+    careerOpportunities: [] as string[],
+    employmentTrend: 'Stable' as any,
+    employmentScore: 80,
+    averageSalary: 'Non spécifié'
+  });
+  const [newCareerOpp, setNewCareerOpp] = useState('');
+
   // Custom Dialog/Toast states
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{message: string, onConfirm: () => void} | null>(null);
@@ -548,15 +720,19 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   };
 
   const handleDeleteConcours = async (id: string, name: string) => {
-    if (confirm(`Voulez-vous supprimer le concours "${name}" ?`)) {
-      try {
-        await governmentOpportunityService.deleteOpportunity(id);
-        setNotification({ message: 'Concours supprimé avec succès.', type: 'success' });
-        await fetchConcoursList();
-      } catch (e: any) {
-        setNotification({ message: `Erreur de suppression: ${e.message}`, type: 'error' });
+    setConfirmDialog({
+      message: `Voulez-vous supprimer le concours "${name}" ?`,
+      onConfirm: async () => {
+        try {
+          await governmentOpportunityService.deleteOpportunity(id);
+          setNotification({ message: 'Concours supprimé avec succès.', type: 'success' });
+          await fetchConcoursList();
+        } catch (e: any) {
+          setNotification({ message: `Erreur de suppression: ${e.message}`, type: 'error' });
+        }
+        setConfirmDialog(null);
       }
-    }
+    });
   };
 
   useEffect(() => {
@@ -1319,7 +1495,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
           </button>
           <button 
             onClick={onBack}
-            className="text-sm font-bold text-slate-400 hover:text-indigo-600 px-4 py-2"
+            className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border border-slate-200 transition-all shadow-sm"
           >
             Retour
           </button>
@@ -1367,58 +1543,62 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex gap-4">
+        <div className="p-6 border-b border-slate-100 flex flex-col gap-6">
+          <div className="flex flex-wrap gap-2.5 max-w-full">
             <button
               onClick={() => setActiveTab('users')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
                 activeTab === 'users' 
-                  ? 'bg-indigo-50 text-indigo-600' 
-                  : 'text-slate-600 hover:bg-slate-50'
+                  ? 'bg-indigo-600 text-white shadow-indigo-100' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
+              <Users className="w-4 h-4" />
               Utilisateurs
             </button>
             <button
               onClick={() => setActiveTab('payments')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
                 activeTab === 'payments' 
-                  ? 'bg-indigo-50 text-indigo-600' 
-                  : 'text-slate-600 hover:bg-slate-50'
+                  ? 'bg-indigo-600 text-white shadow-indigo-100' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
+              <CreditCard className="w-4 h-4" />
               Paiements
             </button>
             <button
               onClick={() => setActiveTab('notifications')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
                 activeTab === 'notifications' 
-                  ? 'bg-amber-50 text-amber-600' 
-                  : 'text-slate-600 hover:bg-slate-50'
+                  ? 'bg-amber-600 text-white shadow-amber-100' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
+              <Bell className="w-4 h-4" />
               Notifications
             </button>
             <button
               onClick={() => setActiveTab('institutions')}
-              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
                 activeTab === 'institutions' 
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' 
-                  : 'text-slate-600 hover:bg-slate-100'
+                  ? 'bg-emerald-600 text-white shadow-emerald-100' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
+              <School className="w-4 h-4" />
               Établissements {duplicateCount > 0 && (
-                <span className="ml-1 bg-white text-emerald-600 px-1.5 py-0.5 rounded-full text-[10px]">
+                <span className="ml-1 bg-white text-emerald-600 px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse">
                   {duplicateCount}
                 </span>
               )}
             </button>
             {activeTab === 'institutions' && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={handleCleanDuplicates}
                   disabled={loadingInstitutions}
-                  className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-md ${
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-md ${
                     duplicateCount > 0 
                       ? 'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200 animate-pulse' 
                       : 'bg-emerald-500 text-white hover:bg-emerald-600'
@@ -1442,7 +1622,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       setNotification({ message: "Aucun doublon détecté.", type: 'success' });
                     }
                   }}
-                  className="p-2 hover:bg-emerald-50 rounded-xl text-emerald-600 border border-emerald-100 transition-all"
+                  className="p-2.5 hover:bg-emerald-50 rounded-xl text-emerald-600 border border-emerald-100 bg-emerald-50/10 transition-all"
                   title="Scanner les doublons"
                 >
                   <RefreshCw className={`w-4 h-4 ${loadingInstitutions ? 'animate-spin' : ''}`} />
@@ -1451,56 +1631,74 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
             )}
             <button
               onClick={() => setActiveTab('intelligence')}
-              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
                 activeTab === 'intelligence' 
-                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-200' 
-                  : 'text-slate-600 hover:bg-slate-100'
+                  ? 'bg-purple-600 text-white shadow-purple-100' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
+              <Zap className="w-4 h-4" />
               Intelligence IA
             </button>
             <button
               onClick={() => setActiveTab('gov_sync')}
-              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
                 activeTab === 'gov_sync' 
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-200' 
-                  : 'text-slate-600 hover:bg-slate-100'
+                  ? 'bg-rose-600 text-white shadow-rose-100' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
+              <RefreshCw className="w-4 h-4" />
               Sync Gouv
             </button>
             <button
               onClick={() => setActiveTab('concours')}
-              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
                 activeTab === 'concours' 
-                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' 
-                  : 'text-slate-600 hover:bg-slate-100'
+                  ? 'bg-yellow-600 text-white shadow-yellow-105' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
+              <Briefcase className="w-4 h-4" />
               Concours de la fonction publique
             </button>
 
             <button
               onClick={() => setActiveTab('deduplication')}
-              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
                 activeTab === 'deduplication' 
-                  ? 'bg-pink-600 text-white shadow-lg shadow-pink-200' 
-                  : 'text-slate-600 hover:bg-slate-100'
+                  ? 'bg-pink-600 text-white shadow-pink-100' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
+              <Layers className="w-4 h-4" />
               Dédoublonnage
             </button>
             <button
               onClick={() => setActiveTab('links')}
-              className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
                 activeTab === 'links' 
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' 
-                  : 'text-slate-600 hover:bg-slate-100'
+                  ? 'bg-teal-600 text-white shadow-teal-100' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
+              <ExternalLink className="w-4 h-4" />
               Liens Utiles
             </button>
+            <button
+              onClick={() => setActiveTab('diagnostic')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
+                activeTab === 'diagnostic' 
+                  ? 'bg-rose-750 text-white shadow-rose-200' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <AlertCircle className="w-4 h-4" />
+              Diagnostic Collecte
+            </button>
           </div>
+        </div>
+        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
           
           <div className="flex flex-wrap gap-3 w-full sm:w-auto items-center">
             {/* Search Bar - Common */}
@@ -1964,10 +2162,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                         <div className="flex items-center justify-end gap-2">
                           <button 
                             onClick={() => handleDownloadAnalysis(user)}
-                            className={`p-2 rounded-lg transition-colors ${
+                            className={`p-1.5 rounded-lg border transition-all ${
                               user.details.analysisResult 
-                                ? 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50' 
-                                : 'text-slate-200 cursor-not-allowed'
+                                ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-indigo-100' 
+                                : 'text-slate-300 bg-slate-50 border-slate-100 cursor-not-allowed'
                             }`}
                             title="Télécharger le rapport d'analyse"
                             disabled={!user.details.analysisResult}
@@ -1976,14 +2174,14 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                           </button>
                           <button 
                             onClick={() => setSelectedUser(user)}
-                            className="text-slate-400 hover:text-indigo-600 p-2 hover:bg-indigo-50 rounded-lg transition-colors"
+                            className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-1.5 rounded-lg border border-emerald-100 transition-all font-medium"
                             title="Voir détails"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
                           <button 
                             onClick={() => handleDeleteUser(user.id)}
-                            className="text-red-500 hover:text-red-700 font-medium p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            className="text-rose-600 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-lg border border-rose-100 transition-all font-medium"
                             title="Supprimer l'utilisateur"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -2078,6 +2276,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
             <UsefulLinksPanel isAdmin={true} />
           )}
 
+          {activeTab === 'diagnostic' && (
+            <DiagnosticPanel />
+          )}
+
           {activeTab === 'institutions' && (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -2087,13 +2289,16 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       <th className="px-6 py-4">Type</th>
                       <th className="px-6 py-4">Pays</th>
                       <th className="px-6 py-4">Ville</th>
-                      <th className="px-6 py-4">Filières</th>
+                      <th className="px-6 py-4">Total Filières</th>
+                      <th className="px-6 py-4">Filières (Aperçu)</th>
                       <th className="px-6 py-4">Statut</th>
                       <th className="px-6 py-4 rounded-tr-lg">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                {[...institutions, ...mockInstitutions.filter(mi => !institutions.some(ri => ri.name === mi.name))].map((inst) => (
+                {[...institutions, ...mockInstitutions.filter(mi => !institutions.some(ri => ri.name === mi.name))]
+                  .filter(inst => !deletedInstitutionIds.includes(inst.id.toString()))
+                  .map((inst) => (
                   <tr key={inst.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -2111,7 +2316,22 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-slate-600 text-sm">{inst.city}</td>
-                    <td className="px-6 py-4 text-slate-600 font-medium">{inst.programs?.length || inst.programsCount || 0}</td>
+                    <td className="px-6 py-4">
+                      <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-100/60 w-max inline-block">
+                        {inst.programs?.length || inst.programsCount || 0}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1">
+                        {inst.programs && inst.programs.length > 0 ? (
+                          <span className="text-[10px] text-slate-400 truncate max-w-[200px]" title={inst.programs.map((p: any) => p.name).join(', ')}>
+                            {inst.programs.map((p: any) => p.name).slice(0, 2).join(', ')}{inst.programs.length > 2 ? '...' : ''}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">-</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         inst.isVerified
@@ -2122,12 +2342,23 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <button 
-                        onClick={() => alert(`Gestion de ${inst.name}`)}
-                        className="text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded transition-colors text-sm font-medium border border-indigo-200"
-                      >
-                        Gérer
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => handleManageInstitution(inst)}
+                          className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-all text-xs font-bold border border-indigo-200 flex items-center gap-1 shadow-sm"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Gérer
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteInstitution(inst.id, inst.name)}
+                          className="text-rose-600 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition-all text-xs font-bold border border-rose-200 flex items-center gap-1 shadow-sm"
+                          title="Supprimer l'établissement"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Supprimer
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -2536,6 +2767,532 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Institutional Edit Modal Overlay */}
+      {editingInstitution && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[90] p-4 text-left">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.98, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-[32px] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-slate-100"
+          >
+            {/* Modal Header */}
+            <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between shadow-sm">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <School className="w-5 h-5 text-indigo-600" />
+                  Mettre à jour l'établissement
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  ID de référence : <span className="font-mono text-slate-500">{editingInstitution.id}</span>
+                </p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setEditingInstitution(null)}
+                className="w-10 h-10 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-800 transition-colors flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Tab Switcher */}
+            <div className="flex border-b border-slate-100 bg-slate-50/50 px-8 py-2 gap-4">
+              <button
+                type="button"
+                onClick={() => { setInstitutionsModalTab('info'); setShowProgramForm(false); }}
+                className={`pb-2 pt-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${
+                  institutionsModalTab === 'info' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                Général
+              </button>
+              <button
+                type="button"
+                onClick={() => { setInstitutionsModalTab('location'); setShowProgramForm(false); }}
+                className={`pb-2 pt-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${
+                  institutionsModalTab === 'location' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                Localisation
+              </button>
+              <button
+                type="button"
+                onClick={() => { setInstitutionsModalTab('desc'); setShowProgramForm(false); }}
+                className={`pb-2 pt-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${
+                  institutionsModalTab === 'desc' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                Description & Médias
+              </button>
+              <button
+                type="button"
+                onClick={() => { setInstitutionsModalTab('programs'); setShowProgramForm(false); }}
+                className={`pb-2 pt-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${
+                  institutionsModalTab === 'programs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                Filières ({editingInstitution.programs?.length || 0})
+              </button>
+            </div>
+
+            {/* Modal Content Column */}
+            <div className="flex-1 overflow-y-auto p-8 bg-white max-h-[58vh]">
+              {institutionsModalTab === 'info' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="col-span-1 md:col-span-2">
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Nom de l'établissement *</label>
+                    <input 
+                      type="text"
+                      value={editingInstitution.name}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, name: e.target.value })}
+                      required
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-sm"
+                      placeholder="Université Joseph Ki-Zerbo..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Type de structure</label>
+                    <select
+                      value={editingInstitution.type}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, type: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white outline-none focus:border-indigo-600 transition-colors font-semibold text-sm"
+                    >
+                      <option value="Université Publique">Université Publique</option>
+                      <option value="Université Privée">Université Privée</option>
+                      <option value="Institut Public">Institut Public</option>
+                      <option value="Institut Privé">Institut Privé</option>
+                      <option value="École d’Ingénieurs">École d’Ingénieurs</option>
+                      <option value="École de Commerce">École de Commerce</option>
+                      <option value="École de Santé">École de Santé</option>
+                      <option value="Centre Technique">Centre Technique</option>
+                      <option value="Centre TIC">Centre TIC</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Site internet (Website URL)</label>
+                    <input 
+                      type="text"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-sm"
+                      value={editingInstitution.website}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, website: e.target.value })}
+                      placeholder="https://www.ujkz.bf"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Téléphone officiel de contact</label>
+                    <input 
+                      type="text"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-sm"
+                      value={editingInstitution.phone}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, phone: e.target.value })}
+                      placeholder="+226 25 30 00 00"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Email officiel de scolarité</label>
+                    <input 
+                      type="email"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-sm"
+                      value={editingInstitution.email}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, email: e.target.value })}
+                      placeholder="contact@ujkz.bf"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Année de fondation</label>
+                    <input 
+                      type="number"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-sm"
+                      value={editingInstitution.establishedYear}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, establishedYear: Number(e.target.value) || 2000 })}
+                      placeholder="1974"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Nombre d'étudiants (Approximatif)</label>
+                    <input 
+                      type="number"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-sm"
+                      value={editingInstitution.studentCount}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, studentCount: Number(e.target.value) || 0 })}
+                      placeholder="45000"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {institutionsModalTab === 'location' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Pays de situation</label>
+                    <input 
+                      type="text"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-sm"
+                      value={editingInstitution.country}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, country: e.target.value })}
+                      placeholder="Burkina Faso"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Ville de situation</label>
+                    <input 
+                      type="text"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-sm"
+                      value={editingInstitution.city}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, city: e.target.value })}
+                      placeholder="Ouagadougou"
+                    />
+                  </div>
+
+                  <div className="col-span-1 md:col-span-2">
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Adresse physique complète (Campus / Quartier)</label>
+                    <input 
+                      type="text"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-sm"
+                      value={editingInstitution.address}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, address: e.target.value })}
+                      placeholder="Avenue Charles de Gaulle, Boîte Postale 7021 Ouagadougou"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {institutionsModalTab === 'desc' && (
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Description officielle (Affiche de l'Établissement)</label>
+                    <textarea 
+                      rows={6}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-medium text-sm leading-relaxed"
+                      value={editingInstitution.description}
+                      onChange={(e) => setEditingInstitution({ ...editingInstitution, description: e.target.value })}
+                      placeholder="Décrivez l'historique, les points forts académiques de l'établissement de façon captivante..."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">URL du Logo d'Établissement</label>
+                      <input 
+                        type="text"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-xs text-slate-600"
+                        value={editingInstitution.logo}
+                        onChange={(e) => setEditingInstitution({ ...editingInstitution, logo: e.target.value })}
+                        placeholder="https://example.com/logo.png"
+                      />
+                      {editingInstitution.logo && (
+                        <div className="mt-3 flex items-center gap-2 text-xs text-slate-400 bg-slate-50 p-2 rounded-lg">
+                          <img src={editingInstitution.logo} alt="Preview" className="w-8 h-8 rounded-full border border-slate-200 object-contain shrink-0" onError={(ev)=>{(ev.target as HTMLImageElement).src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=100"}} />
+                          <span>Aperçu en direct du logo</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">URL de l'Image de couverture</label>
+                      <input 
+                        type="text"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-indigo-600 transition-colors font-semibold text-xs text-slate-600"
+                        value={editingInstitution.coverImage}
+                        onChange={(e) => setEditingInstitution({ ...editingInstitution, coverImage: e.target.value })}
+                        placeholder="https://example.com/campus-photo.jpg"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {institutionsModalTab === 'programs' && (
+                <div>
+                  {!showProgramForm ? (
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Cursus ({editingInstitution.programs?.length || 0} configurés)</span>
+                        <button
+                          type="button"
+                          onClick={handleProgramAddStart}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Ajouter une filière
+                        </button>
+                      </div>
+
+                      {(!editingInstitution.programs || editingInstitution.programs.length === 0) ? (
+                        <div className="py-8 text-center text-slate-400 border-2 border-dashed border-slate-100 rounded-2xl">
+                          <Plus className="w-8 h-8 mx-auto opacity-30 mb-2" />
+                          <p className="text-xs font-bold">Aucune filière configurée pour l'instant.</p>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3">
+                          {editingInstitution.programs.map((prog: any, index: number) => (
+                            <div key={prog.id || index} className="p-4 rounded-xl border border-slate-100 hover:bg-slate-50/50 flex justify-between items-start gap-4 transition-colors">
+                              <div>
+                                <span className="font-bold text-slate-800 text-sm block">{prog.name}</span>
+                                <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                                  <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-bold">{prog.degreeLevel || 'Licence'}</span>
+                                  <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold">{prog.field || 'Général'}</span>
+                                  <span className="text-[10px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-bold">{prog.duration || '3 ans'}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleProgramEditStart(index)}
+                                  className="p-1.5 hover:bg-white border hover:border-slate-200 text-slate-500 hover:text-indigo-600 rounded-lg transition-all"
+                                  title="Modifier la filière"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleProgramDelete(index)}
+                                  className="p-1.5 hover:bg-white border hover:border-red-200 text-slate-400 hover:text-red-600 rounded-lg transition-all"
+                                  title="Supprimer la filière"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    // Add/Edit Program interactive subform
+                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200/60 transition-all text-left">
+                      <div className="border-b border-slate-200pb-3 mb-5 flex items-center justify-between">
+                        <h4 className="font-black text-sm text-slate-800 uppercase tracking-wider">
+                          {currentProgramIndex !== null ? 'Modifier la filière' : 'Nouvelle filière'}
+                        </h4>
+                        <span className="text-[10px] font-bold text-slate-400">Étape locale</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="col-span-1 md:col-span-2">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Titre exact du cursus *</label>
+                          <input 
+                            type="text"
+                            required
+                            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 outline-none focus:border-indigo-650 transition-colors font-semibold text-xs"
+                            value={tempProgram.name}
+                            onChange={(e) => setTempProgram({ ...tempProgram, name: e.target.value })}
+                            placeholder="ex: Licence de Sciences Informatiques"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Domaine d'études</label>
+                          <input 
+                            type="text"
+                            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 outline-none focus:border-indigo-650 transition-colors font-semibold text-xs"
+                            value={tempProgram.field}
+                            onChange={(e) => setTempProgram({ ...tempProgram, field: e.target.value })}
+                            placeholder="ex: Sciences et Technologies"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Grade d'admission</label>
+                          <select
+                            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 outline-none focus:border-indigo-650 transition-colors font-semibold text-xs"
+                            value={tempProgram.degreeLevel}
+                            onChange={(e) => setTempProgram({ ...tempProgram, degreeLevel: e.target.value })}
+                          >
+                            <option value="Licence">Licence LMD</option>
+                            <option value="Master">Master LMD</option>
+                            <option value="Doctorat">Doctorat</option>
+                            <option value="BTS">BTS (Bac+2)</option>
+                            <option value="Ingénieur">Diplôme d’Ingénieur</option>
+                            <option value="DUT">DUT</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Durée du cursus</label>
+                          <input 
+                            type="text"
+                            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 outline-none focus:border-indigo-650 transition-colors font-semibold text-xs"
+                            value={tempProgram.duration}
+                            onChange={(e) => setTempProgram({ ...tempProgram, duration: e.target.value })}
+                            placeholder="ex: 3 ans"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Scolarité d'inscription (FCFA / An)</label>
+                          <input 
+                            type="number"
+                            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 outline-none focus:border-indigo-650 transition-colors font-semibold text-xs"
+                            value={tempProgram.tuitionFee}
+                            onChange={(e) => setTempProgram({ ...tempProgram, tuitionFee: Number(e.target.value) || 0 })}
+                            placeholder="ex: 250000"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tendance d'emploi</label>
+                          <select
+                            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 outline-none focus:border-indigo-650 transition-colors font-semibold text-xs"
+                            value={tempProgram.employmentTrend}
+                            onChange={(e) => setTempProgram({ ...tempProgram, employmentTrend: e.target.value as any })}
+                          >
+                            <option value="Très Forte Demande">Très Forte Demande</option>
+                            <option value="Forte Demande">Forte Demande</option>
+                            <option value="Stable">Stable</option>
+                            <option value="Saturé">Saturé</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Score Insertion Professionnelle (0-100)</label>
+                          <input 
+                            type="number"
+                            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 outline-none focus:border-indigo-650 transition-colors font-semibold text-xs"
+                            value={tempProgram.employmentScore}
+                            onChange={(e) => setTempProgram({ ...tempProgram, employmentScore: Number(e.target.value) || 80 })}
+                            placeholder="ex: 85"
+                          />
+                        </div>
+
+                        <div className="col-span-1 md:col-span-2">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Description synthétique du cursus</label>
+                          <textarea 
+                            rows={3}
+                            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 outline-none focus:border-indigo-650 transition-colors font-medium text-xs leading-relaxed"
+                            value={tempProgram.description}
+                            onChange={(e) => setTempProgram({ ...tempProgram, description: e.target.value })}
+                            placeholder="Objectifs de formation, modules principaux..."
+                          />
+                        </div>
+
+                        {/* Program careerOpportunities List controller */}
+                        <div className="col-span-1 md:col-span-2">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Débouchés / Métiers Cibles</label>
+                          <div className="flex gap-2 max-w-full mb-3">
+                            <input 
+                              type="text"
+                              className="flex-1 px-3 py-2 bg-white rounded-lg border border-slate-200 outline-none focus:border-indigo-650 transition-colors font-semibold text-xs"
+                              value={newCareerOpp}
+                              onChange={(e) => setNewCareerOpp(e.target.value)}
+                              placeholder="ex: Ingénieur DevOps, Administrateur Réseau"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  if (newCareerOpp.trim()) {
+                                    setTempProgram({
+                                      ...tempProgram,
+                                      careerOpportunities: [...(tempProgram.careerOpportunities || []), newCareerOpp.trim()]
+                                    });
+                                    setNewCareerOpp('');
+                                  }
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (newCareerOpp.trim()) {
+                                  setTempProgram({
+                                    ...tempProgram,
+                                    careerOpportunities: [...(tempProgram.careerOpportunities || []), newCareerOpp.trim()]
+                                  });
+                                  setNewCareerOpp('');
+                                }
+                              }}
+                              className="px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs"
+                            >
+                              Ajouter
+                            </button>
+                          </div>
+                          
+                          {/* Render current program career targets as responsive mini tags */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {tempProgram.careerOpportunities?.map((item, idx) => (
+                              <span key={idx} className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 text-slate-700 font-bold text-[10px] group border border-slate-200 rounded">
+                                {item}
+                                <button
+                                  type="button"
+                                  onClick={() => setTempProgram({
+                                    ...tempProgram,
+                                    careerOpportunities: tempProgram.careerOpportunities.filter((_, i) => i !== idx)
+                                  })}
+                                  className="text-slate-400 hover:text-red-600 font-bold"
+                                >
+                                  &times;
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Program Form Action Buttons */}
+                      <div className="flex justify-end gap-3 mt-6 border-t border-slate-200 pt-4">
+                        <button
+                          type="button"
+                          onClick={() => { setShowProgramForm(false); setCurrentProgramIndex(null); }}
+                          className="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleProgramSave}
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors"
+                        >
+                          Sauvegarder la filière
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Bottom Bars Actions */}
+            <div className="px-8 py-5 border-t border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
+              <span className="text-xs text-slate-400 font-medium">Les filières éditées resteront stockées en mémoire locale jusqu'à soumission.</span>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingInstitution(null)}
+                  className="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-xs transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUpdateInstitutionDetails}
+                  disabled={savingInstitution}
+                  className="px-6 py-3 bg-indigo-650 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-colors flex items-center gap-2 shadow-lg"
+                >
+                  {savingInstitution ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Mise à jour en cours...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Enregistrer les modifications
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </motion.div>
         </div>
       )}

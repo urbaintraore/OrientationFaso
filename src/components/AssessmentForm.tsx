@@ -19,21 +19,25 @@ const trimesterSchema = z.object({
 const yearSchema = z.object({
   avg: trimesterSchema,
   math: trimesterSchema,
-  pc: trimesterSchema,
+  physique: trimesterSchema,
+  chimie: trimesterSchema,
   svt: trimesterSchema,
   fr: trimesterSchema,
   eng: trimesterSchema,
   hg: trimesterSchema,
+  philo: trimesterSchema.optional(),
 });
 
 const examSchema = z.object({
   avg: gradeSchema,
   math: gradeSchema,
-  pc: gradeSchema,
+  physique: gradeSchema,
+  chimie: gradeSchema,
   svt: gradeSchema,
   fr: gradeSchema,
   eng: gradeSchema,
   hg: gradeSchema,
+  philo: gradeSchema.optional(),
 });
 
 const formSchema = z.object({
@@ -104,7 +108,8 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
         average: calcAvg(data.grade6.avg),
         grades: [
           { subject: 'Mathématiques', grade: calcAvg(data.grade6.math) },
-          { subject: 'Physique-Chimie', grade: calcAvg(data.grade6.pc) },
+          { subject: 'Physique', grade: calcAvg(data.grade6.physique) },
+          { subject: 'Chimie', grade: calcAvg(data.grade6.chimie) },
           { subject: 'SVT', grade: calcAvg(data.grade6.svt) },
           { subject: 'Français', grade: calcAvg(data.grade6.fr) },
           { subject: 'Anglais', grade: calcAvg(data.grade6.eng) },
@@ -116,7 +121,8 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
         average: calcAvg(data.grade5.avg),
         grades: [
           { subject: 'Mathématiques', grade: calcAvg(data.grade5.math) },
-          { subject: 'Physique-Chimie', grade: calcAvg(data.grade5.pc) },
+          { subject: 'Physique', grade: calcAvg(data.grade5.physique) },
+          { subject: 'Chimie', grade: calcAvg(data.grade5.chimie) },
           { subject: 'SVT', grade: calcAvg(data.grade5.svt) },
           { subject: 'Français', grade: calcAvg(data.grade5.fr) },
           { subject: 'Anglais', grade: calcAvg(data.grade5.eng) },
@@ -128,7 +134,8 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
         average: calcAvg(data.grade4.avg),
         grades: [
           { subject: 'Mathématiques', grade: calcAvg(data.grade4.math) },
-          { subject: 'Physique-Chimie', grade: calcAvg(data.grade4.pc) },
+          { subject: 'Physique', grade: calcAvg(data.grade4.physique) },
+          { subject: 'Chimie', grade: calcAvg(data.grade4.chimie) },
           { subject: 'SVT', grade: calcAvg(data.grade4.svt) },
           { subject: 'Français', grade: calcAvg(data.grade4.fr) },
           { subject: 'Anglais', grade: calcAvg(data.grade4.eng) },
@@ -140,7 +147,8 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
         average: calcAvg(data.grade3.avg),
         grades: [
           { subject: 'Mathématiques', grade: calcAvg(data.grade3.math) },
-          { subject: 'Physique-Chimie', grade: calcAvg(data.grade3.pc) },
+          { subject: 'Physique', grade: calcAvg(data.grade3.physique) },
+          { subject: 'Chimie', grade: calcAvg(data.grade3.chimie) },
           { subject: 'SVT', grade: calcAvg(data.grade3.svt) },
           { subject: 'Français', grade: calcAvg(data.grade3.fr) },
           { subject: 'Anglais', grade: calcAvg(data.grade3.eng) },
@@ -151,7 +159,8 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
 
     const bepcGrades: GradeEntry[] = [
       { subject: 'Mathématiques', grade: data.bepc.math },
-      { subject: 'Physique-Chimie', grade: data.bepc.pc },
+      { subject: 'Physique', grade: data.bepc.physique },
+      { subject: 'Chimie', grade: data.bepc.chimie },
       { subject: 'SVT', grade: data.bepc.svt },
       { subject: 'Français', grade: data.bepc.fr },
       { subject: 'Anglais', grade: data.bepc.eng },
@@ -183,7 +192,7 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
       if (!values) return '-';
       let sum = 0;
       let count = 0;
-      const subjects = ['math', 'pc', 'svt', 'fr', 'eng', 'hg'];
+      const subjects = ['math', 'physique', 'chimie', 'svt', 'fr', 'eng', 'hg'];
       subjects.forEach(sub => {
         const val = values[sub]?.[trim];
         if (val !== undefined && val !== null && !isNaN(val) && val !== '') {
@@ -234,13 +243,21 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
           {errorPrefix?.[prefix]?.avg && <div className="text-xs text-red-500 text-right">Moyenne requise</div>}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {['Math', 'PC', 'SVT', 'Fr', 'Eng', 'HG'].map((subj) => (
-                  <div key={subj}>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">{subj}</label>
+              {[
+                { name: 'math', label: 'Mathématiques' },
+                { name: 'physique', label: 'Physique' },
+                { name: 'chimie', label: 'Chimie' },
+                { name: 'svt', label: 'SVT' },
+                { name: 'fr', label: 'Français' },
+                { name: 'eng', label: 'Anglais' },
+                { name: 'hg', label: 'Histoire-Géo' }
+              ].map((subj) => (
+                  <div key={subj.name}>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">{subj.label}</label>
                       <input
                           type="number"
                           step="0.01"
-                          {...register(`${prefix}.${subj.toLowerCase()}.${activeTab}` as any, { valueAsNumber: true })}
+                          {...register(`${prefix}.${subj.name}.${activeTab}` as any, { valueAsNumber: true })}
                           className="w-full rounded-lg border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
                           placeholder="Note"
                       />
@@ -266,13 +283,21 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
           />
           {errorPrefix?.[prefix]?.avg && <span className="text-xs text-red-500">Requis</span>}
         </div>
-        {['Math', 'PC', 'SVT', 'Fr', 'Eng', 'HG'].map((subj) => (
-          <div key={subj}>
-            <label className="mb-1 block text-xs font-medium text-slate-500">{subj}</label>
+        {[
+          { name: 'math', label: 'Mathématiques' },
+          { name: 'physique', label: 'Physique' },
+          { name: 'chimie', label: 'Chimie' },
+          { name: 'svt', label: 'SVT' },
+          { name: 'fr', label: 'Français' },
+          { name: 'eng', label: 'Anglais' },
+          { name: 'hg', label: 'Histoire-Géo' }
+        ].map((subj) => (
+          <div key={subj.name}>
+            <label className="mb-1 block text-xs font-medium text-slate-500">{subj.label}</label>
             <input
               type="number"
               step="0.01"
-              {...register(`${prefix}.${subj.toLowerCase()}` as any, { valueAsNumber: true })}
+              {...register(`${prefix}.${subj.name}` as any, { valueAsNumber: true })}
               className="w-full rounded-lg border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
             />
           </div>
