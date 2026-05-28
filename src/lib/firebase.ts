@@ -3,7 +3,28 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getStorage } from 'firebase/storage';
-import firebaseConfig from '../../firebase-applet-config.json';
+import firebaseConfigJson from '../../firebase-applet-config.json';
+
+// Support both environment variables and fallback config JSON
+const getEnvVal = (envVal: string | undefined, jsonVal: string): string => {
+  if (!envVal) return jsonVal;
+  const trimmed = envVal.trim();
+  if (trimmed === "" || trimmed.startsWith("re_") || trimmed.includes("PLACEHOLDER") || trimmed === "MY_API_KEY") {
+    return jsonVal;
+  }
+  return trimmed;
+};
+
+const firebaseConfig = {
+  apiKey: getEnvVal(import.meta.env.VITE_FIREBASE_API_KEY, firebaseConfigJson.apiKey),
+  authDomain: getEnvVal(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, firebaseConfigJson.authDomain),
+  projectId: getEnvVal(import.meta.env.VITE_FIREBASE_PROJECT_ID, firebaseConfigJson.projectId),
+  storageBucket: getEnvVal(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, firebaseConfigJson.storageBucket),
+  messagingSenderId: getEnvVal(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, firebaseConfigJson.messagingSenderId),
+  appId: getEnvVal(import.meta.env.VITE_FIREBASE_APP_ID, firebaseConfigJson.appId),
+  measurementId: getEnvVal(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, firebaseConfigJson.measurementId || ""),
+  firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID, firebaseConfigJson.firestoreDatabaseId)
+};
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
