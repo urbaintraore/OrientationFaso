@@ -880,37 +880,63 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
         </div>
 
         {/* Testimonials Section */}
-        {result.testimonials && result.testimonials.length > 0 && (
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="bg-indigo-50 rounded-3xl p-8 border border-indigo-100"
-          >
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-white text-indigo-600 rounded-lg shadow-sm">
-                <Quote className="w-5 h-5" />
+        {(() => {
+          const defaultBepcTestimonials = [
+            {
+              author: "Amina Tiemtoré",
+              role: "Étudiante en Médecine, ex-élève de la Série D (Ouagadougou)",
+              quote: "Grâce à l'analyse de mes relevés, la plateforme m'a confirmé que la Série D était mon meilleur atout. Aujourd'hui, je suis épanouie en faculté de médecine.",
+              photo: "https://images.unsplash.com/photo-1531123897727-8f129e1bf98c?w=100&h=100&fit=crop&q=80"
+            },
+            {
+              author: "Inoussa Sawadogo",
+              role: "Ancien élève de la Série C (Koudougou)",
+              quote: "Suivre ces recommandations fondées m'a permis d'éviter une mauvaise série. Les explications d'OrientationBF m'ont donné les bons conseils pour mon parcours.",
+              photo: "https://images.unsplash.com/photo-1522529599102-1322a5f44e20?w=100&h=100&fit=crop&q=80"
+            }
+          ];
+          const testimonialsToRender = (result.testimonials && result.testimonials.length > 0) ? result.testimonials : defaultBepcTestimonials;
+          return (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="bg-indigo-50 rounded-3xl p-8 border border-indigo-100"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-white text-indigo-600 rounded-lg shadow-sm">
+                  <Quote className="w-5 h-5" />
+                </div>
+                <h3 className="text-xl font-bold text-indigo-900">Ils ont choisi cette voie</h3>
               </div>
-              <h3 className="text-xl font-bold text-indigo-900">Ils ont choisi cette voie</h3>
-            </div>
-            <div className="grid md:grid-cols-2 gap-6">
-              {result.testimonials.map((testimonial, i) => (
-                <div key={i} className="bg-white p-6 rounded-2xl shadow-sm">
-                  <p className="text-slate-600 italic mb-4">"{testimonial.quote}"</p>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
-                      {testimonial.author.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-slate-900">{testimonial.author}</div>
-                      <div className="text-xs text-slate-500">{testimonial.role}</div>
+              <div className="grid md:grid-cols-2 gap-6">
+                {testimonialsToRender.map((testimonial: any, i) => (
+                  <div key={i} className="bg-white p-6 rounded-2xl shadow-sm">
+                    <p className="text-slate-600 italic mb-4">"{testimonial.quote}"</p>
+                    <div className="flex items-center gap-3">
+                      {testimonial.photo ? (
+                        <img 
+                          src={testimonial.photo} 
+                          alt={testimonial.author}
+                          className="w-10 h-10 rounded-full object-cover ring-2 ring-indigo-100"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
+                          {testimonial.author.charAt(0)}
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-semibold text-slate-900">{testimonial.author}</div>
+                        <div className="text-xs text-slate-500">{testimonial.role}</div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
+                ))}
+              </div>
+            </motion.div>
+          );
+        })()}
 
         {/* Useful Links Section */}
         {result.usefulLinks && result.usefulLinks.length > 0 && (

@@ -26,17 +26,23 @@ import { EstablishmentDashboard } from './components/establishment/Establishment
 import { ScholarshipHub } from './components/opportunities/ScholarshipHub';
 import { AboutPage } from './components/AboutPage';
 import { LiveChatWidget } from './components/LiveChatWidget';
+import { QuizHub } from './components/quiz/QuizHub';
+import { FormationsHub } from './components/FormationsHub';
 import { analyzeProfile, analyzePostBacProfile } from './services/gemini';
 import { careerGatheringService } from './services/careerGatheringService';
 import { StudentProfile, AnalysisResult, PostBacProfile, UniversityAnalysisResult, SavedProject, UserProfile } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 import { School, GraduationCap, Building2 } from 'lucide-react';
 
-import { auth, db, requestNotificationPermission } from './lib/firebase';
+import { auth, db, requestNotificationPermission, isFirebaseConfigured } from './lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, onSnapshot, deleteDoc } from 'firebase/firestore';
 
 async function testFirebaseConnection() {
+  if (!isFirebaseConfigured) {
+    console.log("Firebase Connection: Running in Local Demo Mode (Unconfigured)");
+    return;
+  }
   try {
     // Attempt to fetch a non-existent doc from server to verify connectivity
     await getDocFromServer(doc(db, '_connection_test_', 'ping'));
@@ -48,7 +54,7 @@ async function testFirebaseConnection() {
   }
 }
 
-type ViewState = 'hero' | 'mode-selection' | 'auth' | 'payment' | 'form-bepc' | 'form-bac' | 'results-bepc' | 'results-bac' | 'methodology' | 'admin-dashboard' | 'establishment-dashboard' | 'pricing' | 'project-list' | 'marketplace' | 'institution-details' | 'scholarships' | 'about' | 'useful-links';
+type ViewState = 'hero' | 'mode-selection' | 'auth' | 'payment' | 'form-bepc' | 'form-bac' | 'results-bepc' | 'results-bac' | 'methodology' | 'admin-dashboard' | 'establishment-dashboard' | 'pricing' | 'project-list' | 'marketplace' | 'institution-details' | 'scholarships' | 'about' | 'useful-links' | 'quiz-hub' | 'formations';
 
 export default function App() {
   const [view, setView] = useState<ViewState>('hero');
@@ -68,6 +74,39 @@ export default function App() {
   });
 
   useEffect(() => {
+    if (!isFirebaseConfigured) {
+      // Offline / Local Demo mode state sync
+      const cachedProfile = localStorage.getItem('orientationbf_demo_user_profile');
+      if (cachedProfile) {
+        try {
+          const profileData = JSON.parse(cachedProfile);
+          setUserProfile(profileData);
+          if (profileData.profileType === 'etablissement') {
+            setIsEstablishment(true);
+          }
+          if (profileData.hasPaid) {
+            setHasPaid(true);
+          }
+        } catch (e) {
+          console.error("Failed to parse cached profile", e);
+        }
+      } else if (isAuthenticated) {
+        // Fallback demo profile matching the stored role state
+        const isCurrentlyAdmin = localStorage.getItem('orientationbf_admin') === 'true';
+        const profileData: UserProfile = {
+          uid: isCurrentlyAdmin ? 'demo-admin-uid' : 'demo-local-user',
+          email: isCurrentlyAdmin ? 'admin@orientationbf.com' : 'demo@orientationbf.com',
+          displayName: isCurrentlyAdmin ? 'Administrateur OrientationBF' : 'Utilisateur Démo',
+          profileType: isCurrentlyAdmin ? 'system_admin' : 'student',
+          createdAt: new Date().toISOString(),
+          hasPaid: true
+        };
+        setUserProfile(profileData);
+        setHasPaid(true);
+      }
+      return; // Do not use live auth listener when Firebase is not configured
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setIsAuthenticated(true);
@@ -206,9 +245,42 @@ export default function App() {
   const handleLogin = (email?: string, password?: string) => {
     setIsAuthenticated(true);
     setError(null);
-    if ((email === 'admin@orientationbf.com' && password === 'admin123') || email === 'urbain.traoreurb@gmail.com' || email === 'urbain.traore@gmail.com') {
+    const cleanEmail = email?.trim().toLowerCase() || '';
+    const cleanPassword = password?.trim() || '';
+    const isMockAdmin = (cleanEmail === 'admin@orientationbf.com' && cleanPassword === 'admin123') || cleanEmail === 'urbain.traoreurb@gmail.com' || cleanEmail === 'urbain.traore@gmail.com';
+    if (isMockAdmin) {
       setIsAdmin(true);
       localStorage.setItem('orientationbf_admin', 'true');
+    }
+    
+    if (!isFirebaseConfigured) {
+      if (isMockAdmin) {
+        const adminProfile: UserProfile = {
+          uid: 'demo-admin-uid',
+          email: cleanEmail || 'admin@orientationbf.com',
+          displayName: 'Administrateur OrientationBF',
+          profileType: 'system_admin',
+          createdAt: new Date().toISOString(),
+          hasPaid: true
+        };
+        setUserProfile(adminProfile);
+        localStorage.setItem('orientationbf_demo_user_profile', JSON.stringify(adminProfile));
+      } else if (cleanEmail) {
+        const isEtabEmail = cleanEmail.toLowerCase().includes('etab') || cleanEmail.toLowerCase().includes('school') || cleanEmail.toLowerCase().includes('universite');
+        const defaultProfile: UserProfile = {
+          uid: 'demo-local-user',
+          email: cleanEmail,
+          displayName: cleanEmail.split('@')[0],
+          profileType: isEtabEmail ? 'etablissement' : 'student',
+          createdAt: new Date().toISOString(),
+          hasPaid: true
+        };
+        if (isEtabEmail) {
+          setIsEstablishment(true);
+        }
+        setUserProfile(defaultProfile);
+        localStorage.setItem('orientationbf_demo_user_profile', JSON.stringify(defaultProfile));
+      }
     }
     
     if (selectedMode) {
@@ -309,6 +381,7 @@ export default function App() {
     setUserProfile(null);
     localStorage.removeItem('orientationbf_admin');
     localStorage.removeItem('orientationbf_user');
+    localStorage.removeItem('orientationbf_demo_user_profile');
     setView('hero');
   };
 
@@ -385,6 +458,8 @@ export default function App() {
         onAdmin={() => setView('admin-dashboard')}
         onEstablishmentDashboard={() => setView('establishment-dashboard')}
         onAbout={() => setView('about')}
+        onQuizHub={() => setView('quiz-hub')}
+        onFormations={() => setView('formations')}
       />
       
       <main className="flex-grow relative">
@@ -738,6 +813,39 @@ export default function App() {
               exit={{ opacity: 0 }}
             >
               <AboutPage />
+            </motion.div>
+          )}
+
+          {view === 'quiz-hub' && (
+            <motion.div
+              key="quiz-hub"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <QuizHub 
+                onBack={() => {
+                  setView('hero');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                userEmail={userProfile?.email || undefined}
+              />
+            </motion.div>
+          )}
+
+          {view === 'formations' && (
+            <motion.div
+              key="formations"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <FormationsHub 
+                userProfile={userProfile}
+                isAdmin={isAdmin}
+                isEstablishment={isEstablishment}
+                onBackToHero={() => setView('hero')}
+              />
             </motion.div>
           )}
         </AnimatePresence>

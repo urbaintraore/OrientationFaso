@@ -6,29 +6,33 @@ import { getStorage } from 'firebase/storage';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
 // Support both environment variables and fallback config JSON
-const getEnvVal = (envVal: string | undefined, jsonVal: string): string => {
-  if (!envVal) return jsonVal;
+const getEnvVal = (envVal: string | undefined, jsonVal: string | undefined): string => {
+  if (!envVal) return jsonVal || "";
   const trimmed = envVal.trim();
   if (trimmed === "" || trimmed.startsWith("re_") || trimmed.includes("PLACEHOLDER") || trimmed === "MY_API_KEY") {
-    return jsonVal;
+    return jsonVal || "";
   }
   return trimmed;
 };
 
 const firebaseConfig = {
-  apiKey: getEnvVal(import.meta.env.VITE_FIREBASE_API_KEY, firebaseConfigJson.apiKey),
-  authDomain: getEnvVal(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, firebaseConfigJson.authDomain),
-  projectId: getEnvVal(import.meta.env.VITE_FIREBASE_PROJECT_ID, firebaseConfigJson.projectId),
-  storageBucket: getEnvVal(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, firebaseConfigJson.storageBucket),
-  messagingSenderId: getEnvVal(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, firebaseConfigJson.messagingSenderId),
-  appId: getEnvVal(import.meta.env.VITE_FIREBASE_APP_ID, firebaseConfigJson.appId),
-  measurementId: getEnvVal(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, firebaseConfigJson.measurementId || ""),
-  firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID, firebaseConfigJson.firestoreDatabaseId)
+  apiKey: getEnvVal(import.meta.env.VITE_FIREBASE_API_KEY, firebaseConfigJson.apiKey) || "dummy-api-key-for-applet-safety",
+  authDomain: getEnvVal(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, firebaseConfigJson.authDomain) || "dummy-project.firebaseapp.com",
+  projectId: getEnvVal(import.meta.env.VITE_FIREBASE_PROJECT_ID, firebaseConfigJson.projectId) || "dummy-project",
+  storageBucket: getEnvVal(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, firebaseConfigJson.storageBucket) || "dummy-project.appspot.com",
+  messagingSenderId: getEnvVal(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, firebaseConfigJson.messagingSenderId) || "123456789",
+  appId: getEnvVal(import.meta.env.VITE_FIREBASE_APP_ID, firebaseConfigJson.appId) || "1:123456789:web:123456789",
+  measurementId: getEnvVal(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, firebaseConfigJson.measurementId || "") || "",
+  firestoreDatabaseId: getEnvVal(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID, firebaseConfigJson.firestoreDatabaseId) || ""
 };
 
+export const isFirebaseConfigured = !!getEnvVal(import.meta.env.VITE_FIREBASE_API_KEY, firebaseConfigJson.apiKey);
+
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth();
+export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)"
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
+export const auth = getAuth(app);
 export const storage = getStorage(app);
 
 let messaging: any = null;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, LineChart, Building2, Bell, X, ExternalLink, Menu, Info, GraduationCap, School, CreditCard, Link as LinkIcon, Moon, Sun } from 'lucide-react';
+import { BookOpen, BrainCircuit, LineChart, Building2, Bell, X, ExternalLink, Menu, Info, GraduationCap, School, CreditCard, Link as LinkIcon, Moon, Sun } from 'lucide-react';
 import { Logo } from './Logo';
 import { notificationService, AppNotification } from '../services/notificationService';
 import { motion, AnimatePresence } from 'motion/react';
@@ -18,10 +18,12 @@ interface HeaderProps {
   onAdmin?: () => void;
   onEstablishmentDashboard?: () => void;
   onAbout?: () => void;
+  onQuizHub?: () => void;
+  onFormations?: () => void;
   isEstablishment?: boolean;
 }
 
-export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onLogin, onLogout, onPricing, onProjects, onMarketplace, onScholarships, onUsefulLinks, onAdmin, onEstablishmentDashboard, onAbout }: HeaderProps) {
+export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onLogin, onLogout, onPricing, onProjects, onMarketplace, onScholarships, onUsefulLinks, onAdmin, onEstablishmentDashboard, onAbout, onQuizHub, onFormations }: HeaderProps) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -87,6 +89,12 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
           </button>
           <button onClick={onMarketplace} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
             Écoles & Universités
+          </button>
+          <button onClick={onFormations} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-semibold">
+            Formations 💡
+          </button>
+          <button onClick={onQuizHub} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-350 transition-colors flex items-center gap-1.5 font-black bg-indigo-50/60 dark:bg-indigo-950/20 px-2.5 py-1 rounded-lg">
+            Quiz & Examens IA
           </button>
           <button onClick={onPricing} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
             Nos Offres
@@ -238,6 +246,13 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
                 Écoles & Universités
               </button>
               <button 
+                onClick={() => { onFormations?.(); setIsMobileMenuOpen(false); }}
+                className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 font-bold text-sm transition-colors"
+              >
+                <BookOpen className="w-4 h-4 text-indigo-500" />
+                Formations Professionnelles
+              </button>
+              <button 
                 onClick={() => { onScholarships?.(); setIsMobileMenuOpen(false); }}
                 className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 font-bold text-sm transition-colors"
               >
@@ -250,6 +265,13 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
               >
                 <LinkIcon className="w-4 h-4 text-slate-400" />
                 Liens utiles
+              </button>
+              <button 
+                onClick={() => { onQuizHub?.(); setIsMobileMenuOpen(false); }}
+                className="flex items-center gap-3 p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-black text-sm transition-colors border border-indigo-100/30"
+              >
+                <BrainCircuit className="w-4 h-4" />
+                Quiz & Examens IA
               </button>
               <button 
                 onClick={() => { onPricing?.(); setIsMobileMenuOpen(false); }}

@@ -179,6 +179,30 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "type", "organization", "deadline", "officialUrl", "status", "source", "createdAt"]
+    },
+    "Formation": {
+      "title": "Formation",
+      "description": "Professional and academic training program",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "titre": { "type": "string" },
+        "description": { "type": "string" },
+        "domaine": { "type": "string" },
+        "niveau": { "type": "string", "enum": ["Débutant", "Intermédiaire", "Avancé"] },
+        "type": { "type": "string", "enum": ["Présentiel", "En ligne", "Hybride"] },
+        "duree": { "type": "string" },
+        "prix": { "type": "number" },
+        "lieu": { "type": "string" },
+        "date_debut": { "type": "string" },
+        "date_fin": { "type": "string" },
+        "image": { "type": "string" },
+        "createur_id": { "type": "string" },
+        "createur_type": { "type": "string", "enum": ["admin", "etablissement"] },
+        "statut": { "type": "string", "enum": ["brouillon", "publie", "archive"] },
+        "date_creation": { "type": "string", "format": "date-time" }
+      },
+      "required": ["titre", "description", "domaine", "niveau", "type", "duree", "lieu", "date_debut", "date_fin", "image", "createur_id", "createur_type", "statut", "date_creation"]
     }
   },
   "firestore": {
@@ -217,6 +241,10 @@
     "/government_opportunities/{opportunityId}": {
       "schema": { "$ref": "#/entities/GovernmentOpportunity" },
       "description": "Stores opportunities from CIOSPB and FOSER"
+    },
+    "/formations/{formationId}": {
+      "schema": { "$ref": "#/entities/Formation" },
+      "description": "Stores academic and professional training programs (formations)"
     }
   }
 }

@@ -126,6 +126,24 @@ service cloud.firestore {
         && data.result is map;
     }
 
+    function isValidFormation(data) {
+      return data.titre is string && data.titre.size() <= 256
+        && data.description is string && data.description.size() <= 10000
+        && data.domaine is string && data.domaine.size() <= 128
+        && data.niveau in ['Débutant', 'Intermédiaire', 'Avancé']
+        && data.type in ['Présentiel', 'En ligne', 'Hybride']
+        && data.duree is string && data.duree.size() <= 128
+        && (!('prix' in data) || data.prix is number)
+        && data.lieu is string && data.lieu.size() <= 256
+        && data.date_debut is string
+        && data.date_fin is string
+        && data.image is string && data.image.size() <= 1024
+        && data.createur_id is string && data.createur_id.size() <= 128
+        && data.createur_type in ['admin', 'etablissement']
+        && data.statut in ['brouillon', 'publie', 'archive']
+        && data.date_creation is string;
+    }
+
     // --- COLLECTION RULES ---
 
     match /users/{userId} {
@@ -227,6 +245,34 @@ service cloud.firestore {
     match /notifications/{notifId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    match /formations/{formationId} {
+      allow get: if true;
+      allow list: if resource.data.statut == 'publie' || (isSignedIn() && (resource.data.createur_id == request.auth.uid || isAdmin()));
+
+      allow create: if (
+        isAdmin() && isValidFormation(incoming()) && incoming().createur_id == request.auth.uid && incoming().createur_type == 'admin'
+      ) || (
+        isSignedIn() 
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.profileType == 'etablissement'
+        && isValidFormation(incoming())
+        && incoming().createur_id == request.auth.uid
+        && incoming().createur_type == 'etablissement'
+        && incoming().statut == 'brouillon'
+      );
+
+      allow update: if isValidFormation(incoming()) && (
+        (isAdmin() && incoming().createur_type == existing().createur_type && incoming().createur_id == existing().createur_id) || (
+          isSignedIn()
+          && existing().createur_id == request.auth.uid
+          && incoming().createur_id == existing().createur_id
+          && incoming().createur_type == existing().createur_type
+          && (existing().statut == 'brouillon' ? (incoming().statut in ['brouillon', 'archive']) : (incoming().statut == existing().statut))
+        )
+      );
+
+      allow delete: if isAdmin() || (isSignedIn() && existing().createur_id == request.auth.uid);
     }
   }
 }

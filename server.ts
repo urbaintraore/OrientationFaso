@@ -16,7 +16,8 @@ import {
   analyzeGovernmentContent,
   crawlCareerOpportunities,
   extractAcademicData,
-  refreshInstitution
+  refreshInstitution,
+  generateQuizAi
 } from "./src/server/geminiBackend.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -177,6 +178,15 @@ app.post("/api/gemini/refresh-institution", async (req, res) => {
   try {
     const { name, city, country } = req.body;
     const result = await refreshInstitution(name, city, country);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/gemini/quiz", async (req, res) => {
+  try {
+    const result = await generateQuizAi(req.body);
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -371,6 +381,223 @@ app.post("/api/scholarships/crawl", async (req, res) => {
   // In a real app, this would trigger the actual crawler
   console.log("Crawl requested for sources...");
   res.json({ message: "Crawling started", taskId: Date.now() });
+});
+
+// --- FORMATIONS BACKEND REST API WITH RBAC DESIGN ---
+
+interface FormationBackend {
+  id: string;
+  titre: string;
+  description: string;
+  domaine: string;
+  niveau: 'Débutant' | 'Intermédiaire' | 'Avancé';
+  type: 'Présentiel' | 'En ligne' | 'Hybride';
+  duree: string;
+  prix?: number;
+  lieu: string;
+  date_debut: string;
+  date_fin: string;
+  image: string;
+  createur_id: string;
+  createur_type: 'admin' | 'etablissement';
+  statut: 'brouillon' | 'publie' | 'archive';
+  date_creation: string;
+}
+
+// Prepopulated with high quality Burkina professional formations
+let backendFormations: FormationBackend[] = [
+  {
+    id: "backend-f1",
+    titre: "Licence Spécialisée en Cybersécurité & Réseaux Resilients",
+    description: "Conçu pour former les ingénieurs cybersécurité de demain au Burkina Faso. Maîtrisez la gestion des risques cyber, la cryptographie et la défense active des infrastructures critiques.",
+    domaine: "Informatique",
+    niveau: "Avancé",
+    type: "Hybride",
+    duree: "3 ans",
+    prix: 850000,
+    lieu: "Ouagadougou - Université Virtuelle du Burkina",
+    date_debut: "2026-10-01",
+    date_fin: "2029-06-30",
+    image: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+    createur_id: "backend-admin",
+    createur_type: "admin",
+    statut: "publie",
+    date_creation: new Date().toISOString()
+  },
+  {
+    id: "backend-f2",
+    titre: "Diplôme de Technicien Agricole et Hydro-Agricole",
+    description: "Une formation tournée vers l'autonomie alimentaire et la maîtrise de l'irrigation moderne au Burkina Faso. Apprentissage intensif appliqué au maraîchage.",
+    domaine: "Agriculture & Élevage",
+    niveau: "Débutant",
+    type: "Présentiel",
+    duree: "2 ans",
+    prix: 400000,
+    lieu: "Koudougou - Institut Rural de Développement",
+    date_debut: "2026-11-10",
+    date_fin: "2028-06-30",
+    image: "https://images.unsplash.com/photo-1625246143124-2e68b63e0017?auto=format&fit=crop&q=80&w=800",
+    createur_id: "backend-admin",
+    createur_type: "admin",
+    statut: "publie",
+    date_creation: new Date().toISOString()
+  }
+];
+
+// GET /api/formations (consultation publique et filtrage)
+app.get("/api/formations", (req: express.Request, res: express.Response) => {
+  try {
+    const { domaine, niveau, type, lieu, prixMax, statut } = req.query;
+    let list = [...backendFormations];
+
+    if (domaine) list = list.filter(f => f.domaine === domaine);
+    if (niveau) list = list.filter(f => f.niveau === niveau);
+    if (type) list = list.filter(f => f.type === type);
+    if (lieu) list = list.filter(f => f.lieu.toLowerCase().includes(String(lieu).toLowerCase()));
+    if (prixMax) list = list.filter(f => !f.prix || f.prix <= Number(prixMax));
+    
+    if (statut) {
+      list = list.filter(f => f.statut === statut);
+    } else {
+      // Filtrage par défaut pour le grand public (seulement publié)
+      const userRole = req.headers["x-user-role"] || "student";
+      const userId = req.headers["x-user-id"];
+      if (userRole !== "admin") {
+        list = list.filter(f => f.statut === "publie" || (userId && f.createur_id === userId));
+      }
+    }
+
+    res.json(list);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/formations/:id (détail d'une formation)
+app.get("/api/formations/:id", (req: express.Request, res: express.Response) => {
+  try {
+    const formation = backendFormations.find(f => f.id === req.params.id);
+    if (!formation) {
+      return res.status(404).json({ error: "Formation introuvable" });
+    }
+    res.json(formation);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/formations (création)
+app.post("/api/formations", (req: express.Request, res: express.Response) => {
+  try {
+    const { titre, description, domaine, niveau, type, duree, prix, lieu, date_debut, date_fin, image, createur_id, createur_role } = req.body;
+
+    const activeRole = createur_role || req.headers["x-user-role"];
+    const activeUserId = createur_id || req.headers["x-user-id"] || "api-user";
+
+    // 1. RBAC check
+    if (activeRole !== "admin" && activeRole !== "etablissement") {
+      return res.status(403).json({
+        error: "Accès refusé : Seuls les rôles 'admin' ou 'etablissement' peuvent créer des formations."
+      });
+    }
+
+    // 2. Input validation
+    if (!titre || !description || !domaine || !niveau || !type || !duree || !lieu || !date_debut || !date_fin) {
+      return res.status(400).json({
+        error: "Tous les champs requis doivent être fournis."
+      });
+    }
+
+    // 3. Workflow statut transitions
+    const statut = activeRole === "admin" ? "publie" : "brouillon";
+
+    const newFormation: FormationBackend = {
+      id: "api-f-" + Date.now(),
+      titre,
+      description,
+      domaine,
+      niveau: niveau as any,
+      type: type as any,
+      duree,
+      prix: prix ? Number(prix) : undefined,
+      lieu,
+      date_debut,
+      date_fin,
+      image: image || "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=800",
+      createur_id: activeUserId,
+      createur_type: activeRole === "admin" ? "admin" : "etablissement",
+      statut,
+      date_creation: new Date().toISOString()
+    };
+
+    backendFormations.push(newFormation);
+    res.status(201).json(newFormation);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/formations/:id (mise à jour)
+app.put("/api/formations/:id", (req: express.Request, res: express.Response) => {
+  try {
+    const index = backendFormations.findIndex(f => f.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ error: "Formation introuvable" });
+    }
+
+    const current = backendFormations[index];
+    const activeRole = req.headers["x-user-role"] || req.body.active_role;
+    const activeUserId = req.headers["x-user-id"] || req.body.active_user_id;
+
+    // Control access: Admin or Owner of the training
+    const isAuthorized = activeRole === "admin" || (activeRole === "etablissement" && current.createur_id === activeUserId);
+    if (!isAuthorized) {
+      return res.status(403).json({ error: "Accès refusé : Vous ne pouvez modifier que vos propres formations." });
+    }
+
+    // Validation transition: Etablissement cannot bypass draft unless admin approves
+    if (activeRole !== "admin" && req.body.statut === "publie" && current.statut !== "publie") {
+      return res.status(403).json({ error: "Accès refusé : Seul l'administrateur peut publier ou valider une formation." });
+    }
+
+    const updated: FormationBackend = {
+      ...current,
+      ...req.body,
+      id: current.id, // ID is immutable
+      createur_id: current.createur_id, // Creator properties are immutable
+      createur_type: current.createur_type,
+      date_creation: current.date_creation
+    };
+
+    backendFormations[index] = updated;
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/formations/:id (suppression)
+app.delete("/api/formations/:id", (req: express.Request, res: express.Response) => {
+  try {
+    const index = backendFormations.findIndex(f => f.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ error: "Formation introuvable" });
+    }
+
+    const current = backendFormations[index];
+    const activeRole = req.headers["x-user-role"];
+    const activeUserId = req.headers["x-user-id"];
+
+    const isAuthorized = activeRole === "admin" || (activeRole === "etablissement" && current.createur_id === activeUserId);
+    if (!isAuthorized) {
+      return res.status(403).json({ error: "Accès refusé : Vous ne pouvez supprimer que vos propres formations." });
+    }
+
+    backendFormations = backendFormations.filter(f => f.id !== req.params.id);
+    res.json({ success: true, message: "Formation supprimée avec succès" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 async function startServer() {

@@ -379,3 +379,23 @@ export interface Scholarship {
   recommendedProfiles?: string[];
   admissionChance?: number;
 }
+
+export interface Formation {
+  id: string;
+  titre: string;
+  description: string;
+  domaine: string;
+  niveau: 'Débutant' | 'Intermédiaire' | 'Avancé';
+  type: 'Présentiel' | 'En ligne' | 'Hybride';
+  duree: string;
+  prix?: number;
+  lieu: string;
+  date_debut: string;
+  date_fin: string;
+  image: string;
+  createur_id: string;
+  createur_type: 'admin' | 'etablissement';
+  statut: 'brouillon' | 'publie' | 'archive';
+  date_creation: string;
+}
+
