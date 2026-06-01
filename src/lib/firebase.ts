@@ -3,7 +3,10 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getStorage } from 'firebase/storage';
-import firebaseConfigJson from '../../firebase-applet-config.json';
+
+// Safely resolve the configuration using a glob pattern so the compiler doesn't demand the file to exist during gitignored production builds
+const configFiles = import.meta.glob('../../firebase-applet-config.json', { eager: true });
+const firebaseConfigJson: any = (configFiles['../../firebase-applet-config.json'] as any)?.default || {};
 
 // Support both environment variables and fallback config JSON
 const getEnvVal = (envVal: string | undefined, jsonVal: string | undefined): string => {
