@@ -144,6 +144,22 @@ service cloud.firestore {
         && data.date_creation is string;
     }
 
+    function isValidMarketplaceListing(data) {
+      return data.userId is string && data.userId.size() <= 128
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 256
+        && data.description is string && data.description.size() > 0 && data.description.size() <= 5000
+        && data.price is number && data.price >= 0
+        && data.category in ['Livres scolaires & universitaires', 'Matériel didactique', 'Vélos & Motos', 'Vie étudiante & Autres']
+        && data.condition in ['Neuf', 'Très bon état', 'Bon état', 'État satisfaisant']
+        && data.images is list && data.images.size() <= 4
+        && data.location is string && data.location.size() <= 256
+        && data.contact is string && data.contact.size() <= 128
+        && data.createdAt is string
+        && data.status in ['active', 'sold', 'reported', 'deleted']
+        && (!('reportsCount' in data) || data.reportsCount is number)
+        && (!('reportedBy' in data) || data.reportedBy is list);
+    }
+
     // --- COLLECTION RULES ---
 
     match /users/{userId} {
@@ -273,6 +289,26 @@ service cloud.firestore {
       );
 
       allow delete: if isAdmin() || (isSignedIn() && existing().createur_id == request.auth.uid);
+    }
+
+    match /marketplace_listings/{listingId} {
+      allow get: if true;
+      allow list: if resource.data.status == 'active' || (isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()));
+
+      allow create: if isSignedIn()
+        && incoming().userId == request.auth.uid
+        && isValidMarketplaceListing(incoming());
+
+      allow update: if isSignedIn() && (
+        // Case 1: Owner updates their listing
+        (existing().userId == request.auth.uid && incoming().userId == request.auth.uid && isValidMarketplaceListing(incoming())) ||
+        // Case 2: Any signed in user can report a listing (only affects reportsCount, reportedBy, or status)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['reportsCount', 'reportedBy', 'status']) && incoming().reportsCount == existing().reportsCount + 1 && (incoming().status == 'reported' || incoming().status == existing().status)) ||
+        // Case 3: Admin updates anything
+        isAdmin()
+      );
+
+      allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
   }
 }

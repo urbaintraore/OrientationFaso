@@ -160,6 +160,7 @@ export interface UserProfile {
   paymentMethod?: 'orange' | 'moov' | 'telecel';
   paymentTransactionId?: string;
   paymentDate?: string;
+  testsRunCount?: number;
 }
 
 export interface UFR {
@@ -398,4 +399,24 @@ export interface Formation {
   statut: 'brouillon' | 'publie' | 'archive';
   date_creation: string;
 }
+
+export interface MarketplaceListing {
+  id: string;
+  userId: string;
+  userName?: string;
+  userEmail?: string;
+  title: string;
+  description: string;
+  price: number;
+  category: 'Livres scolaires & universitaires' | 'Matériel didactique' | 'Vélos & Motos' | 'Vie étudiante & Autres';
+  condition: 'Neuf' | 'Très bon état' | 'Bon état' | 'État satisfaisant';
+  images: string[];
+  location: string;
+  contact: string;
+  createdAt: string;
+  status: 'active' | 'sold' | 'reported' | 'deleted';
+  reportsCount?: number;
+  reportedBy?: string[]; // Array of userIds who reported to prevent multiple reports from same user
+}
+
 

@@ -18,7 +18,7 @@ interface ScholarshipHubProps {
 }
 
 export const ScholarshipHub: React.FC<ScholarshipHubProps> = ({ isAdmin, userProfile }) => {
-  const [activeTab, setActiveTab] = useState<'official' | 'ai_search'>('official');
+  const [activeTab, setActiveTab] = useState<'official' | 'ai_search'>('ai_search');
 
   return (
     <div className="min-h-screen bg-slate-50 pt-20">

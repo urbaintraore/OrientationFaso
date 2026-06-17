@@ -18,6 +18,8 @@ export function ProjectList({ projects, onSelectProject, onDeleteProject, onNewP
   const [activeTab, setActiveTab] = useState<'projects' | 'favorites'>('projects');
   const [favoriteInstitutions, setFavoriteInstitutions] = useState<string[]>([]);
   const [favoriteScholarships, setFavoriteScholarships] = useState<string[]>([]);
+  const [favoriteProjectIds, setFavoriteProjectIds] = useState<string[]>([]);
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
   const [scholarshipsData, setScholarshipsData] = useState<GovernmentOpportunity[]>([]);
   
   useEffect(() => {
@@ -30,7 +32,20 @@ export function ProjectList({ projects, onSelectProject, onDeleteProject, onNewP
       setFavoriteScholarships(JSON.parse(savedScholars));
       fetchScholarships();
     }
+    const savedFavProjects = localStorage.getItem('orientationbf_favorite_project_ids');
+    if (savedFavProjects) {
+      setFavoriteProjectIds(JSON.parse(savedFavProjects));
+    }
   }, []);
+
+  const toggleProjectFavorite = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = favoriteProjectIds.includes(id)
+      ? favoriteProjectIds.filter(pid => pid !== id)
+      : [...favoriteProjectIds, id];
+    setFavoriteProjectIds(updated);
+    localStorage.setItem('orientationbf_favorite_project_ids', JSON.stringify(updated));
+  };
 
   const fetchScholarships = async () => {
     try {
@@ -119,7 +134,7 @@ export function ProjectList({ projects, onSelectProject, onDeleteProject, onNewP
                 <FolderOpen className="w-8 h-8 text-slate-400" />
               </div>
               <h3 className="text-xl font-semibold text-slate-900 mb-2">Aucun projet sauvegardé</h3>
-              <p className="text-slate-500 mb-6 max-w-md mx-auto">Commence une nouvelle analyse pour obtenir des recommandations d'orientation et sauvegarde-les ici.</p>
+              <p className="text-slate-500 mb-6 max-w-md mx-auto">Commence une nouvelle analyse pour obtenir des recommandations d\'orientation et sauvegarde-les ici.</p>
               <button
                 onClick={onNewProject}
                 className="text-indigo-600 font-medium hover:text-indigo-800 hover:underline"
@@ -128,58 +143,98 @@ export function ProjectList({ projects, onSelectProject, onDeleteProject, onNewP
               </button>
             </div>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {projects.map((project) => (
-                <motion.div
-                  key={project.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-all group relative"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className={`p-3 rounded-xl ${project.type === 'bepc' ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                      {project.type === 'bepc' ? <School className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setProjectToDelete(project.id);
-                      }}
-                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Supprimer le projet"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+            <div className="space-y-6">
+              {/* Projects Filter Header */}
+              <div className="flex items-center justify-between bg-slate-50 px-4 py-3 text-sm rounded-xl border border-slate-100 mb-2">
+                <span className="text-slate-650 font-medium">Filtrer mes analyses :</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowOnlyFavorites(false)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${!showOnlyFavorites ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                  >
+                    Tout ({projects.length})
+                  </button>
+                  <button
+                    onClick={() => setShowOnlyFavorites(true)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${showOnlyFavorites ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${showOnlyFavorites ? 'fill-white' : 'text-rose-500 fill-rose-500'}`} />
+                    Mes Favoris ({projects.filter(p => favoriteProjectIds.includes(p.id)).length})
+                  </button>
+                </div>
+              </div>
 
-                  <h3 className="text-lg font-bold text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors">
-                    {project.name}
-                  </h3>
-                  
-                  <div className="flex items-center gap-4 text-xs text-slate-500 mb-6">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {new Date(project.date).toLocaleDateString('fr-FR')}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <User className="w-3 h-3" />
-                      {project.profile.name}
-                    </div>
-                  </div>
+              {projects.filter(p => !showOnlyFavorites || favoriteProjectIds.includes(p.id)).length === 0 ? (
+                <div className="text-center py-16 bg-slate-50 rounded-2xl border border-slate-200">
+                  <Heart className="w-8 h-8 text-rose-300 mx-auto mb-2 fill-rose-100" />
+                  <p className="text-slate-500 font-medium">Aucun projet marqué comme favori pour l'instant.</p>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {projects
+                    .filter(p => !showOnlyFavorites || favoriteProjectIds.includes(p.id))
+                    .map((project) => (
+                      <motion.div
+                        key={project.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-all group relative"
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div className={`p-3 rounded-xl ${project.type === 'bepc' ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                            {project.type === 'bepc' ? <School className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => toggleProjectFavorite(project.id, e)}
+                              className={`p-2 rounded-lg transition-colors ${favoriteProjectIds.includes(project.id) ? 'text-rose-600 bg-rose-50' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}
+                              title={favoriteProjectIds.includes(project.id) ? "Retirer des favoris" : "Ajouter aux favoris"}
+                            >
+                              <Heart className={`w-4 h-4 ${favoriteProjectIds.includes(project.id) ? 'fill-rose-600' : ''}`} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setProjectToDelete(project.id);
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Supprimer le projet"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
 
-                  <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
-                    <span className="text-sm font-medium text-slate-600">
-                      {project.type === 'bepc' ? 'Orientation Lycée' : 'Orientation Université'}
-                    </span>
-                    <button
-                      onClick={() => onSelectProject(project)}
-                      className="flex items-center gap-1 text-sm font-semibold text-indigo-600 group-hover:translate-x-1 transition-transform"
-                    >
-                      Voir <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
+                        <h3 className="text-lg font-bold text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors">
+                          {project.name}
+                        </h3>
+                        
+                        <div className="flex items-center gap-4 text-xs text-slate-500 mb-6">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(project.date).toLocaleDateString('fr-FR')}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {project.profile.name}
+                          </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
+                          <span className="text-sm font-medium text-slate-600">
+                            {project.type === 'bepc' ? 'Orientation Lycée' : 'Orientation Université'}
+                          </span>
+                          <button
+                            onClick={() => onSelectProject(project)}
+                            className="flex items-center gap-1 text-sm font-semibold text-indigo-600 group-hover:translate-x-1 transition-transform"
+                          >
+                            Voir <ArrowRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
+                </div>
+              )}
             </div>
           )}
         </motion.div>

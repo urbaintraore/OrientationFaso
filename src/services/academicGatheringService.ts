@@ -65,24 +65,26 @@ export const academicGatheringService = {
         }
       }
 
-      // 1. Check if institution exists with a more robust check (normalized name + website domain)
+      // 1. Check if institution exists with targeted queries
       const normalizedName = normalizeName(data.institution.name);
       const normalizedDomain = data.institution.website ? normalizeDomain(data.institution.website) : "";
       
-      const institutionsQuery = query(collection(db, 'institutions'));
-      const institutionsSnap = await getDocs(institutionsQuery);
+      let existingInstDoc = null;
+
+      // Try searching by normalized name
+      const nameQuery = query(collection(db, 'institutions'), where('normalized_name', '==', normalizedName));
+      const nameSnap = await getDocs(nameQuery);
       
-      let existingInstDoc = institutionsSnap.docs.find(doc => {
-        const d = doc.data();
-        const dNormName = d.normalized_name || normalizeName(d.name || '');
-        const dNormDomain = d.normalized_domain || (d.website ? normalizeDomain(d.website) : "");
-        
-        // Exact name match, domain match, or aliases check
-        if (dNormName === normalizedName) return true;
-        if (normalizedDomain && dNormDomain && dNormDomain === normalizedDomain) return true;
-        if (d.aliases && d.aliases.includes(data.institution.name)) return true;
-        return false;
-      });
+      if (!nameSnap.empty) {
+        existingInstDoc = nameSnap.docs[0];
+      } else if (normalizedDomain) {
+        // Try searching by domain
+        const domainQuery = query(collection(db, 'institutions'), where('normalized_domain', '==', normalizedDomain));
+        const domainSnap = await getDocs(domainQuery);
+        if (!domainSnap.empty) {
+          existingInstDoc = domainSnap.docs[0];
+        }
+      }
       
       let institutionId: string;
       
@@ -156,14 +158,18 @@ export const academicGatheringService = {
   /**
    * Refreshes metadata (programsCount, socialLinks) for a list of institutions.
    */
-  async refreshAllInstitutions() {
+  async refreshAllInstitutions(onProgress?: (current: number, total: number, lastUpdated: string) => void) {
     const q = query(collection(db, 'institutions'));
     const snap = await getDocs(q);
     
     const results = { updated: 0, failed: 0 };
+    const total = snap.docs.length;
     
-    for (const docSnap of snap.docs) {
+    for (let i = 0; i < snap.docs.length; i++) {
+      const docSnap = snap.docs[i];
       const inst = docSnap.data() as Institution;
+      if (onProgress) onProgress(i + 1, total, inst.name);
+
       try {
         const response = await fetch(`${API_BASE}/refresh-institution`, {
           method: 'POST',

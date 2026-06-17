@@ -308,25 +308,63 @@ export function AssessmentForm({ onSubmit, isLoading }: AssessmentFormProps) {
 
   return (
     <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-      {/* Progress Bar */}
-      <div className="bg-slate-50 px-6 py-4 border-b border-slate-100">
-        <div className="flex justify-between mb-2">
-          {steps.map((step, idx) => (
-            <div key={step.id} className={clsx(
-              "text-xs font-medium transition-colors duration-300",
-              idx <= currentStep ? "text-indigo-600" : "text-slate-400"
-            )}>
-              {step.title}
-            </div>
-          ))}
-        </div>
-        <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+      {/* Visual Stepper Progress Bar */}
+      <div className="bg-slate-50/80 px-6 py-8 border-b border-slate-100">
+        <div className="relative flex justify-between max-w-lg mx-auto">
+          {/* Background trace line */}
+          <div className="absolute top-4 left-0 right-0 h-1 bg-slate-200 -translate-y-1/2 z-0 rounded-full" />
+          
+          {/* Active filled connection line */}
           <motion.div 
-            className="h-full bg-indigo-600"
+            className="absolute top-4 left-0 h-1 bg-indigo-600 -translate-y-1/2 z-0 rounded-full"
             initial={{ width: 0 }}
-            animate={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
-            transition={{ duration: 0.3 }}
+            animate={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
           />
+
+          {steps.map((step, idx) => {
+            const isCompleted = idx < currentStep;
+            const isActive = idx === currentStep;
+            
+            return (
+              <div key={step.id} className="relative z-10 flex flex-col items-center">
+                {/* Stepper Circle */}
+                <motion.div
+                  initial={false}
+                  animate={{
+                    scale: isActive ? 1.15 : 1.0,
+                    backgroundColor: isCompleted ? '#4f46e5' : isActive ? '#ffffff' : '#f1f5f9',
+                    borderColor: isCompleted ? '#4f46e5' : isActive ? '#4f46e5' : '#cbd5e1',
+                  }}
+                  className={clsx(
+                    "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all shadow-sm",
+                    isCompleted ? "text-white" : isActive ? "text-indigo-600 bg-white" : "text-slate-400"
+                  )}
+                >
+                  {isCompleted ? (
+                    <Check className="w-4 h-4 text-white font-bold" />
+                  ) : (
+                    <span>{idx + 1}</span>
+                  )}
+                </motion.div>
+                
+                {/* Stepper Title */}
+                <span className={clsx(
+                  "mt-2 text-[11px] font-black tracking-wide uppercase transition-colors duration-300 hidden sm:block",
+                  isActive ? "text-indigo-600" : isCompleted ? "text-slate-800" : "text-slate-400"
+                )}>
+                  {step.title}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Dynamic status helper subtitle */}
+        <div className="text-center mt-5">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-xs font-bold text-indigo-700 border border-indigo-100">
+            Étape {currentStep + 1} sur {steps.length} • {Math.round(((currentStep + 1) / steps.length) * 100)}% Complété ({steps[currentStep].title})
+          </span>
         </div>
       </div>
 

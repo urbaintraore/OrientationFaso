@@ -34,7 +34,7 @@ import { ufrService } from '../../services/ufrService';
 import { programService } from '../../services/programService';
 import { postService } from '../../services/postService';
 import { deduplicationService } from '../../services/deduplicationService';
-import { auth, db } from '../../lib/firebase';
+import { auth, db, isFirebaseConfigured } from '../../lib/firebase';
 
 import { MarketTrendsDashboard } from './MarketTrendsDashboard';
 import { SchoolStudentsPanel } from './SchoolStudentsPanel';
@@ -73,14 +73,22 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
           setPosts(postData);
         } else {
           // Fetch user profile to pre-fill setupData
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
+          if (isFirebaseConfigured) {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              setSetupData(prev => ({
+                ...prev,
+                name: userData.institutionName || prev.name,
+                type: (userData.institutionType as InstitutionType) || prev.type,
+                description: userData.description || prev.description,
+                email: user.email || prev.email
+              }));
+            }
+          } else {
+            console.warn("Running in Demo Mode: Skipping institution profile fetch");
             setSetupData(prev => ({
               ...prev,
-              name: userData.institutionName || prev.name,
-              type: (userData.institutionType as InstitutionType) || prev.type,
-              description: userData.description || prev.description,
               email: user.email || prev.email
             }));
           }

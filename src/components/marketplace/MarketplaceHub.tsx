@@ -133,17 +133,19 @@ export function MarketplaceHub({ isAdmin, onSelectInstitution }: MarketplaceHubP
   };
 
   const filteredInstitutions = institutions.filter(inst => {
-    const matchesSearch = inst.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          (inst.programs?.some(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())) || false);
+    const instName = inst.name || '';
+    const instDescription = inst.description || '';
+    const matchesSearch = instName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (inst.programs?.some(p => (p.name || '').toLowerCase().includes(searchTerm.toLowerCase())) || false);
     const matchesType = selectedType === 'All' || inst.type === selectedType;
     const matchesCity = selectedCity === 'All' || inst.city === selectedCity;
     const matchesCountry = selectedCountry === 'All' || inst.country === selectedCountry;
     const matchesLevel = selectedLevel === 'All' || 
-                         (inst.degrees?.some(d => d.toLowerCase().includes(selectedLevel.toLowerCase()))) || 
-                         (inst.programs?.some(p => p.degreeLevel?.toLowerCase().includes(selectedLevel.toLowerCase()) || p.level?.toLowerCase().includes(selectedLevel.toLowerCase())));
+                         (inst.degrees?.some(d => (d || '').toLowerCase().includes(selectedLevel.toLowerCase()))) || 
+                         (inst.programs?.some(p => (p.degreeLevel || p.level || '').toLowerCase().includes(selectedLevel.toLowerCase())));
     const matchesSeries = selectedSeries === 'All' || 
-                          inst.description.toLowerCase().includes(selectedSeries.toLowerCase()) ||
-                          (inst.programs?.some(p => p.description?.toLowerCase().includes(selectedSeries.toLowerCase()) || p.name?.toLowerCase().includes(selectedSeries.toLowerCase())));
+                          instDescription.toLowerCase().includes(selectedSeries.toLowerCase()) ||
+                          (inst.programs?.some(p => (p.description || '').toLowerCase().includes(selectedSeries.toLowerCase()) || (p.name || '').toLowerCase().includes(selectedSeries.toLowerCase())));
                           
     return matchesSearch && matchesType && matchesCity && matchesCountry && matchesLevel && matchesSeries;
   });

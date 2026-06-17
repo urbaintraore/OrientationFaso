@@ -25,8 +25,22 @@ interface GovernmentOpportunitiesProps {
 }
 
 export const GovernmentOpportunities: React.FC<GovernmentOpportunitiesProps> = ({ isAdmin, hideHero }) => {
-  const [opportunities, setOpportunities] = useState<GovernmentOpportunity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [opportunities, setOpportunities] = useState<GovernmentOpportunity[]>(() => {
+    try {
+      const cached = localStorage.getItem('orientationbf_cached_gov_opportunities');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(() => {
+    try {
+      const cached = localStorage.getItem('orientationbf_cached_gov_opportunities');
+      return cached ? JSON.parse(cached).length === 0 : true;
+    } catch {
+      return true;
+    }
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | GovernmentOpportunityType>('all');
   const [selectedOpportunity, setSelectedOpportunity] = useState<GovernmentOpportunity | null>(null);
@@ -48,10 +62,13 @@ export const GovernmentOpportunities: React.FC<GovernmentOpportunitiesProps> = (
   };
 
   const fetchOpportunities = async () => {
-    setLoading(true);
+    if (opportunities.length === 0) {
+      setLoading(true);
+    }
     try {
       const data = await governmentOpportunityService.getAllOpportunities();
       setOpportunities(data);
+      localStorage.setItem('orientationbf_cached_gov_opportunities', JSON.stringify(data));
     } catch (error) {
       console.error("Error fetching opportunities:", error);
     } finally {
@@ -60,8 +77,12 @@ export const GovernmentOpportunities: React.FC<GovernmentOpportunitiesProps> = (
   };
 
   const filteredOpportunities = opportunities.filter(opp => {
-    const matchesSearch = opp.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         opp.organization.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!opp) return false;
+    const title = opp.title || '';
+    const org = opp.organization || '';
+    
+    const matchesSearch = title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         org.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = activeFilter === 'all' || opp.type === activeFilter;
     return matchesSearch && matchesFilter;
   });

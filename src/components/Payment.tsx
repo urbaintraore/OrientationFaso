@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Smartphone, CheckCircle, Loader2, Lock, AlertCircle, MessageCircle, Info, Copy, Check } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
+import { db, auth, isFirebaseConfigured } from '../lib/firebase';
 
 interface PaymentProps {
   onPaymentComplete: () => void;
@@ -29,6 +29,29 @@ export function Payment({ onPaymentComplete }: PaymentProps) {
   };
 
   const handleNotifyPayment = async () => {
+    // If Firebase is NOT configured, simulate successful notification and instantly activate payment local cache!
+    if (!isFirebaseConfigured) {
+      setIsLoading(true);
+      setTimeout(() => {
+        setIsLoading(false);
+        const cached = localStorage.getItem('orientationbf_demo_user_profile');
+        let currentProfile = cached ? JSON.parse(cached) : {};
+        currentProfile = {
+          ...currentProfile,
+          hasPaid: true,
+          paymentStatus: 'validated',
+          paymentMethod: method,
+          paymentTransactionId: transactionId || 'DEMO-TX-' + Math.floor(Math.random() * 1000000),
+          paymentDate: new Date().toISOString(),
+          testsRunCount: 0
+        };
+        localStorage.setItem('orientationbf_demo_user_profile', JSON.stringify(currentProfile));
+        localStorage.setItem('orientationbf_haspaid', 'true');
+        onPaymentComplete(); // instantly complete
+      }, 1000);
+      return;
+    }
+
     if (!auth.currentUser) {
       setError("Tu dois être connecté pour notifier un paiement.");
       return;

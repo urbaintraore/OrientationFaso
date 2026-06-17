@@ -18,6 +18,7 @@ import { deduplicationService, DuplicateCluster } from '../services/deduplicatio
 import { DeduplicationPanel } from './DeduplicationPanel';
 import { UsefulLinksPanel } from './UsefulLinksPanel';
 import { DiagnosticPanel } from './DiagnosticPanel';
+import { ScholarshipMonitor } from './ScholarshipMonitor';
 import { institutionService } from '../services/institutionService';
 import { Layers } from 'lucide-react';
 
@@ -630,7 +631,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   };
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'users' | 'payments' | 'institutions' | 'notifications' | 'intelligence' | 'gov_sync' | 'deduplication' | 'links' | 'concours' | 'diagnostic'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'payments' | 'institutions' | 'notifications' | 'intelligence' | 'gov_sync' | 'schol_monitor' | 'deduplication' | 'links' | 'concours' | 'diagnostic'>('users');
   
   // Institution & program management states
   const [editingInstitution, setEditingInstitution] = useState<any | null>(null);
@@ -814,8 +815,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
       if (!intelUrl.startsWith('http')) {
         const results = await crawlInstitutions(intelUrl);
         if (results && results.length > 0) {
-          setIntelStatus(`Importation de ${results.length} établissements...`);
+          let count = 0;
           for (const inst of results) {
+            count++;
+            setIntelStatus(`Importation (${count}/${results.length}) : ${inst.name}...`);
             await academicGatheringService.saveCrawledData({
               institution: inst,
               programs: inst.programs || []
@@ -1078,13 +1081,16 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
 
   const handleValidatePayment = async (userId: string) => {
     try {
+      const nowIso = new Date().toISOString();
       const userRef = doc(db, 'users', userId.toString());
       await updateDoc(userRef, {
         hasPaid: true,
         paymentStatus: 'validated',
-        status: 'Actif'
+        status: 'Actif',
+        paymentDate: nowIso,
+        testsRunCount: 0
       });
-      setUsers(users.map(u => u.id === userId ? { ...u, hasPaid: true, paymentStatus: 'validated', status: 'Actif' } : u));
+      setUsers(users.map(u => u.id === userId ? { ...u, hasPaid: true, paymentStatus: 'validated', status: 'Actif', paymentDate: nowIso, testsRunCount: 0 } : u));
       setNotification({ message: 'Paiement validé avec succès !', type: 'success' });
     } catch (e) {
       console.error(e);
@@ -1097,9 +1103,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
       const userRef = doc(db, 'users', userId.toString());
       await updateDoc(userRef, {
         paymentStatus: 'rejected',
-        hasPaid: false
+        hasPaid: false,
+        testsRunCount: 0
       });
-      setUsers(users.map(u => u.id === userId ? { ...u, paymentStatus: 'rejected', hasPaid: false } : u));
+      setUsers(users.map(u => u.id === userId ? { ...u, paymentStatus: 'rejected', hasPaid: false, testsRunCount: 0 } : u));
       setNotification({ message: 'Paiement rejeté.', type: 'error' });
     } catch (e) {
       console.error(e);
@@ -1112,14 +1119,17 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
     if (!user) return;
 
     const newPaidStatus = !user.hasPaid;
+    const nowIso = newPaidStatus ? new Date().toISOString() : null;
     try {
       const userRef = doc(db, 'users', id.toString());
       await updateDoc(userRef, {
         hasPaid: newPaidStatus,
         paymentStatus: newPaidStatus ? 'validated' : 'none',
-        status: newPaidStatus ? 'Actif' : 'En attente'
+        status: newPaidStatus ? 'Actif' : 'En attente',
+        paymentDate: nowIso,
+        testsRunCount: 0
       });
-      setUsers(users.map(u => u.id === id ? { ...u, hasPaid: newPaidStatus, paymentStatus: newPaidStatus ? 'validated' : 'none', status: newPaidStatus ? 'Actif' : 'En attente' } : u));
+      setUsers(users.map(u => u.id === id ? { ...u, hasPaid: newPaidStatus, paymentStatus: newPaidStatus ? 'validated' : 'none', status: newPaidStatus ? 'Actif' : 'En attente', paymentDate: nowIso, testsRunCount: 0 } : u));
     } catch (e) {
       console.error(e);
     }
@@ -1653,6 +1663,17 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
               Sync Gouv
             </button>
             <button
+              onClick={() => setActiveTab('schol_monitor')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
+                activeTab === 'schol_monitor' 
+                  ? 'bg-emerald-600 text-white shadow-emerald-100' 
+                  : 'bg-slate-50 border border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              Surveillance Bourses
+            </button>
+            <button
               onClick={() => setActiveTab('concours')}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm ${
                 activeTab === 'concours' 
@@ -1935,9 +1956,11 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                     <button
                       onClick={async () => {
                         setIsIntelRunning(true);
-                        setIntelStatus('Mise à jour globale des métadonnées...');
+                        setIntelStatus('Préparation de la mise à jour globale...');
                         try {
-                          const res = await academicGatheringService.refreshAllInstitutions();
+                          const res = await academicGatheringService.refreshAllInstitutions((current, total, name) => {
+                            setIntelStatus(`Mise à jour (${current}/${total}) : ${name}...`);
+                          });
                           setNotification({ message: `Succès ! ${res.updated} établissements mis à jour.`, type: 'success' });
                           setIntelStatus(`Succès ! ${res.updated} établissements mis à jour.`);
                         } catch (e: any) {
@@ -2065,6 +2088,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
               </div>
             </div>
           )}
+          {activeTab === 'schol_monitor' && <ScholarshipMonitor />}
           {activeTab === 'users' && (
             <div className="space-y-6">
               {/* Statistiques Nationales - Pie Chart */}

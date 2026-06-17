@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, BrainCircuit, LineChart, Building2, Bell, X, ExternalLink, Menu, Info, GraduationCap, School, CreditCard, Link as LinkIcon, Moon, Sun } from 'lucide-react';
+import { BookOpen, BrainCircuit, LineChart, Building2, Bell, X, ExternalLink, Menu, Info, GraduationCap, School, CreditCard, Link as LinkIcon, Moon, Sun, Mail, Loader2 } from 'lucide-react';
 import { Logo } from './Logo';
 import { notificationService, AppNotification } from '../services/notificationService';
 import { motion, AnimatePresence } from 'motion/react';
@@ -12,7 +12,9 @@ interface HeaderProps {
   onLogout?: () => void;
   onPricing?: () => void;
   onProjects?: () => void;
+  onAlerts?: () => void;
   onMarketplace?: () => void;
+  onStudentMarketplace?: () => void;
   onScholarships?: () => void;
   onUsefulLinks?: () => void;
   onAdmin?: () => void;
@@ -23,7 +25,7 @@ interface HeaderProps {
   isEstablishment?: boolean;
 }
 
-export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onLogin, onLogout, onPricing, onProjects, onMarketplace, onScholarships, onUsefulLinks, onAdmin, onEstablishmentDashboard, onAbout, onQuizHub, onFormations }: HeaderProps) {
+export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onLogin, onLogout, onPricing, onProjects, onAlerts, onMarketplace, onStudentMarketplace, onScholarships, onUsefulLinks, onAdmin, onEstablishmentDashboard, onAbout, onQuizHub, onFormations }: HeaderProps) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -90,6 +92,9 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
           <button onClick={onMarketplace} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
             Écoles & Universités
           </button>
+          <button onClick={onStudentMarketplace} className="hover:text-indigo-600 dark:hover:text-teal-400 text-teal-650 dark:text-teal-400 font-bold transition-colors flex items-center gap-1">
+            Marketplace 🛒
+          </button>
           <button onClick={onFormations} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-semibold">
             Formations 💡
           </button>
@@ -106,10 +111,16 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
             </button>
           )}
           {isAuthenticated && (
-            <button onClick={onProjects} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
-              <BookOpen className="w-4 h-4" />
-              Mes Projets
-            </button>
+            <>
+              <button onClick={onProjects} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                <BookOpen className="w-4 h-4" />
+                Mes Projets
+              </button>
+              <button onClick={onAlerts} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                <Bell className="w-4 h-4 text-amber-500" />
+                Mes Alertes
+              </button>
+            </>
           )}
         </nav>
 
@@ -246,6 +257,13 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
                 Écoles & Universités
               </button>
               <button 
+                onClick={() => { onStudentMarketplace?.(); setIsMobileMenuOpen(false); }}
+                className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-teal-950/20 text-teal-600 dark:text-teal-400 font-extrabold text-sm transition-colors border border-dashed border-teal-500/30"
+              >
+                <span className="w-4 h-4">🛒</span>
+                Brocante & Marketplace
+              </button>
+              <button 
                 onClick={() => { onFormations?.(); setIsMobileMenuOpen(false); }}
                 className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 font-bold text-sm transition-colors"
               >
@@ -280,6 +298,25 @@ export function Header({ onStart, isAuthenticated, isAdmin, isEstablishment, onL
                 <CreditCard className="w-4 h-4 text-slate-400" />
                 Nos Offres
               </button>
+
+              {isAuthenticated && (
+                <>
+                  <button 
+                    onClick={() => { onProjects?.(); setIsMobileMenuOpen(false); }}
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 font-bold text-sm transition-colors"
+                  >
+                    <BookOpen className="w-4 h-4 text-indigo-500" />
+                    Mes Projets
+                  </button>
+                  <button 
+                    onClick={() => { onAlerts?.(); setIsMobileMenuOpen(false); }}
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 font-bold text-sm transition-colors"
+                  >
+                    <Bell className="w-4 h-4 text-amber-500" />
+                    Mes Alertes
+                  </button>
+                </>
+              )}
 
               {isAdmin && (
                 <button 
@@ -341,15 +378,88 @@ interface FooterProps {
 }
 
 export function Footer({ onOpenMethodology, onOpenAdmin, isAdmin }: FooterProps) {
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+
   const toggleAdmin = () => {
     const newState = !isAdmin;
     localStorage.setItem('orientationbf_admin', String(newState));
     window.location.reload();
   };
 
+  const handleSubscribe = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !email.includes('@')) {
+      setStatus('error');
+      setMessage('Veuillez entrer une adresse email valide.');
+      return;
+    }
+    setStatus('loading');
+    setTimeout(() => {
+      try {
+        const subscribers = JSON.parse(localStorage.getItem('orientationbf_subscribers') || '[]');
+        if (!subscribers.includes(email)) {
+          subscribers.push(email);
+          localStorage.setItem('orientationbf_subscribers', JSON.stringify(subscribers));
+        }
+        setStatus('success');
+        setMessage('Merci ! Votre inscription a bien été prise en compte.');
+        setEmail('');
+      } catch (err) {
+        setStatus('error');
+        setMessage('Une erreur est survenue lors de l\'enregistrement.');
+      }
+    }, 800);
+  };
+
   return (
-    <footer className="border-t border-slate-200 bg-white py-12">
+    <footer className="border-t border-slate-200 bg-white py-12 dark:bg-slate-950 dark:border-slate-800">
       <div className="container mx-auto px-4 text-center text-slate-500">
+        
+        {/* Newsletter Signup Form */}
+        <div className="max-w-md mx-auto mb-10 pb-8 border-b border-slate-100 dark:border-slate-800">
+          <div className="text-center mb-4">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center justify-center gap-2">
+              <Mail className="w-5 h-5 text-indigo-500 animate-pulse" />
+              Inscris-toi à notre Newsletter
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Ne ratte aucune actualité sur les bourses d'études, les concours de la fonction publique et l'orientation universitaire au Burkina Faso.
+            </p>
+          </div>
+          <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (status === 'error') setStatus('idle');
+              }}
+              required
+              placeholder="Ex: ton.nom@email.com"
+              className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-950 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              type="submit"
+              disabled={status === 'loading'}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              {status === 'loading' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : "S'abonner"}
+            </button>
+          </form>
+          {status === 'error' && (
+            <p className="text-xs text-red-500 text-center mt-2 font-medium">{message}</p>
+          )}
+          {status === 'success' && (
+            <p className="text-xs text-green-600 dark:text-green-400 text-center mt-2 font-black flex items-center justify-center gap-1">
+              ✓ {message}
+            </p>
+          )}
+        </div>
+
         <div className="flex flex-col items-center gap-4 mb-8">
           <button 
             onClick={toggleAdmin}
@@ -359,7 +469,7 @@ export function Footer({ onOpenMethodology, onOpenAdmin, isAdmin }: FooterProps)
           </button>
         </div>
         <p className="mb-4 text-sm">
-          © {new Date().getFullYear()} OrientationBF. Plateforme d'aide à la décision pour l'orientation post-BEPC.
+          © {new Date().getFullYear()} OrientationBF. Plateforme d'aide à la décision pour l'orientation scolaire et universitaire.
         </p>
         
         {isAdmin && (

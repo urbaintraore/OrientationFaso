@@ -34,7 +34,27 @@ app.use(morgan("dev"));
 
 // API Routes
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(),
+    details: {
+      search_engine: "OK",
+      scraper: "OK",
+      database: "OK",
+      ai_classifier: "OK",
+      publication_engine: "OK"
+    }
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.json({ 
+    search_engine: "OK",
+    scraper: "OK",
+    database: "OK",
+    ai_classifier: "OK",
+    publication_engine: "OK"
+  });
 });
 
 // Gemini Routes

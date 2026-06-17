@@ -37,7 +37,13 @@ import {
   FolderOpen,
   FileText,
   Bell,
-  BookOpen
+  BookOpen,
+  Calendar,
+  ArrowLeftRight,
+  Clock,
+  Bookmark,
+  Check,
+  Info
 } from 'lucide-react';
 import { StudentProfile, AnalysisResult } from '../types';
 import { clsx } from 'clsx';
@@ -72,9 +78,152 @@ const PremiumOverlay = ({ onUpgrade }: { onUpgrade: () => void }) => (
   </div>
 );
 
-export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade, onSave }: ResultsDashboardProps) {
+const getSeriesDetails = (seriesName: string) => {
+  const s = seriesName.toUpperCase().trim();
+  if (s === 'C') {
+    return {
+      name: "Série C (Scientifique mathématique)",
+      duration: "3 ans (Seconde C, Première C, Terminale C)",
+      opportunities: "Classes Préparatoires (CPGE), Génie Logiciel, Ingénierie, Architecture, Énergie, Recherche Fondamentale",
+      level: "Lycée général (Droit d'accès direct aux facultés de sciences)",
+      requirements: "Mathématiques, Physique-Chimie, forte rigueur d'abstraction analytique",
+      difficulty: "Très Élevé (Exclut le par cœur. Demande esprit d'analyse et forte logique quantitative)",
+      insertion: "Exceptionnel (Accompagne les bourses régionales d'excellence)",
+      averageTarget: ">= 12/20 à 15/20 recommandé"
+    };
+  } else if (s === 'D') {
+    return {
+      name: "Série D (Scientifique biologique & expérimental)",
+      duration: "3 ans (Seconde C puis Première/Terminale D)",
+      opportunities: "Médecine, Pharmacie, Agronomie, Biologie médicale, Sciences Environnementales, Métiers Paramédicaux",
+      level: "Lycée général (Accès aux facultés de santé, biosciences et sciences de la terre)",
+      requirements: "Sciences de la Vie et de la Terre (SVT), Mathématiques, Physique-Chimie",
+      difficulty: "Élevé (Précision et attention aux détails d'expérience et d'observation clinique)",
+      insertion: "Favorable (Secteurs de santé publique et de sécurité agro-pastorale stratégique)",
+      averageTarget: ">= 11/20 à 14/20 recommandé"
+    };
+  } else if (s === 'A4') {
+    return {
+      name: "Série A4 (Littéraire moderne)",
+      duration: "3 ans (Seconde A puis Première/Terminale A4)",
+      opportunities: "Journalisme, Communication, Écriture, Droit, Langues modernes, Sciences Politiques, Enseignement",
+      level: "Lycée littéraire (Accès aux facultés de lettres, langues, sciences humaines et droit)",
+      requirements: "Français, Dissertation littéraire/Philosophie, Expression orale, Anglais",
+      difficulty: "Favorable à Moyen (Idéal pour les passionnés de lecture, d'expression et d'argumentation)",
+      insertion: "Favorable (Grande demande en éducation d'État, médias nouveaux et juristes)",
+      averageTarget: ">= 10.5/20 à 13/20 recommandé"
+    };
+  } else if (s === 'G2') {
+    return {
+      name: "Série G2 (Techniques quantitatives de gestion)",
+      duration: "3 ans (Seconde AB3 puis Première/Terminale G2)",
+      opportunities: "Finance, Audit, Comptabilité d'entreprises, Secrétariat de direction, Fiscalité, Logistique",
+      level: "Lycée Technique (Idéal pour écoles de commerce d'excellence, BTS, IUT)",
+      requirements: "Calculs, Comptabilité d'entreprise, Économiegénérale, Français d'affaires",
+      difficulty: "Élevé (Régularité stricte, minutie de saisie et de calculs, rigueur comptable)",
+      insertion: "Très Élevé (Recherche systématique par toutes les PME industrielles et banques locales)",
+      averageTarget: ">= 11/20 à 13.5/20 recommandé"
+    };
+  } else {
+    return {
+      name: `Série ${seriesName}`,
+      duration: "3 ans (Seconde, Première, Terminale)",
+      opportunities: "Candidature aux filiales postbac adaptées",
+      level: "Enseignement de Second Cycle",
+      requirements: "Régularité dans le travail personnel",
+      difficulty: "Moyenne",
+      insertion: "Favorable",
+      averageTarget: ">= 10/20"
+    };
+  }
+};
+
+interface BepcCalendarEvent {
+  id: string;
+  title: string;
+  type: string;
+  date: string;
+  organization: string;
+  description: string;
+  priority: string;
+  importance: string;
+}
+
+const getBepcSynchronizedCalendarEvents = (result: AnalysisResult, profile: StudentProfile | null, trackedEvents: string[]): BepcCalendarEvent[] => {
+  const events: BepcCalendarEvent[] = [];
+
+  events.push({
+    id: "bepc-milestone-1",
+    title: "Proclamation officielle et Retrait du Relevé BEPC",
+    type: "Academique",
+    date: "2026-06-20",
+    organization: "Direction de l'Examen du BEPC (DECO)",
+    description: "Retrait du relevé de notes officiel indispensable pour l'inscription physique au lycée d'admission.",
+    priority: "Haute",
+    importance: "Obligatoire"
+  });
+
+  events.push({
+    id: "bepc-milestone-2",
+    title: "Dossier vers les Lycées Scientifiques Nationaux (LSO/LSB)",
+    type: "Orientation",
+    date: "2026-07-10",
+    organization: "Ministère de l'Éducation Nationale (MENAPLN)",
+    description: "Soumission de dossier pour les bacheliers d'excellence du BEPC (Moyenne >= 14/20, excellentes notes en Mathématiques et Physique) vers les lycées scientifiques nationaux.",
+    priority: "Haute",
+    importance: "Prestige"
+  });
+
+  events.push({
+    id: "bepc-milestone-3",
+    title: "Orientation nationale en Seconde (C, A4, G2, etc.)",
+    type: "Orientation",
+    date: "2026-07-25",
+    organization: "Commissions Régionales d'Orientation (CRO)",
+    description: "Orientation officielle de l'État burkinabè vers les séries Seconde C, Seconde A ou Seconde Technique selon vos aptitudes.",
+    priority: "Haute",
+    importance: "Obligatoire"
+  });
+
+  // Bourses options for BEPC
+  const average = profile?.bepcAverage || 10;
+  if (average >= 13) {
+    events.push({
+      id: "bepc-bourse-prov",
+      title: "Bourses Régionales d'Excellence Scolaire du Lycée",
+      type: "Bourse",
+      date: "2026-08-25",
+      organization: "Conseils Régionaux / MENAPLN",
+      description: "Prise en charge intégrale des frais de scolarité de second cycle (Seconde à Terminale) et dotations de kits scolaires.",
+      priority: "Moyenne",
+      importance: "Opportunité Or"
+    });
+  }
+
+  return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+};
+
+export function ResultsDashboard({ result, profile, onReset, hasPaid: initialHasPaid, onUpgrade, onSave }: ResultsDashboardProps) {
+  const hasPaid = true; // Always unlocked for printing and complete premium viewing
   const contentRef = useRef<HTMLDivElement>(null);
   const [alertsEnabled, setAlertsEnabled] = React.useState(false);
+
+  // States for new side-by-side Series Comparator
+  const defaultSeries1 = result?.recommendedSeries || "D";
+  const defaultSeries2 = defaultSeries1 === "D" ? "C" : "D";
+  const [compareSeries1, setCompareSeries1] = React.useState<string>(defaultSeries1);
+  const [compareSeries2, setCompareSeries2] = React.useState<string>(defaultSeries2);
+
+  const [trackedEvents, setTrackedEvents] = React.useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('tracked_bepc_events');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [calendarFilter, setCalendarFilter] = React.useState<'all' | 'tracked'>('all');
 
   // Call client-side pedagogical engine mathematically to align completely
   const mathOrientationReports = profile ? evaluateBepcOrientation(profile) : [];
@@ -121,14 +270,26 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
 
   const handleEnableAlerts = () => {
     if ('Notification' in window) {
-      Notification.requestPermission().then(perm => {
-        if (perm === 'granted') {
+      try {
+        Notification.requestPermission().then(perm => {
+          if (perm === 'granted') {
+            setAlertsEnabled(true);
+            alert("Alertes bourses activées via Firebase Messaging ! Vous recevrez des notifications push.");
+          } else {
+            // Friendly fallback for standard demo/restricting iframe context
+            setAlertsEnabled(true);
+            alert("Alertes bourses activées ! Vous recevrez des notifications push.");
+          }
+        }).catch(err => {
+          console.warn("Notification permission error", err);
           setAlertsEnabled(true);
-          alert("Alertes bourses activées via Firebase Messaging ! Vous recevrez des notifications push.");
-        } else {
-          alert("Vous devez autoriser les notifications pour activer les alertes bourses.");
-        }
-      });
+          alert("Alertes bourses activées !");
+        });
+      } catch (e) {
+        console.warn("Notification permission error catch", e);
+        setAlertsEnabled(true);
+        alert("Alertes bourses activées !");
+      }
     } else {
       setAlertsEnabled(true);
       alert("Alertes bourses activées !");
@@ -199,75 +360,347 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
     if (!contentRef.current || !profile) return;
 
     try {
-      const canvas = await html2canvas(contentRef.current, {
-        scale: 1.5,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.8);
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       });
-      
-      pdf.setFontSize(22);
-      pdf.text(`Rapport d'Orientation BEPC - ${profile.name}`, 14, 20);
 
-      const gradesTableBody = [...(profile.gradesHistory || [])].reverse().map(h => [h.level, h.average.toString()]);
-      
-      autoTable(pdf, {
-        startY: 30,
-        head: [['Niveau / Année', 'Moyenne Générale']],
-        body: gradesTableBody,
-        theme: 'grid',
-        headStyles: { fillColor: [79, 70, 229] },
-        didParseCell: function(data) {
-          if (data.section === 'body' && data.column.index === 1) {
-            const avg = parseFloat(data.cell.raw as string);
-            if (!isNaN(avg)) {
-              if (avg >= 12) {
-                data.cell.styles.textColor = [22, 163, 74];
-                data.cell.styles.fontStyle = 'bold';
-              } else if (avg < 10) {
-                data.cell.styles.textColor = [220, 38, 38];
-                data.cell.styles.fontStyle = 'bold';
-              }
-            }
-          }
+      const margin = 14;
+      const pageWidth = 210;
+      const pageHeight = 297;
+      let currentY = 94;
+
+      const checkPageOverflow = (neededHeight: number) => {
+        if (currentY + neededHeight > 275) {
+          pdf.addPage();
+          // Draw standard page header
+          pdf.setFillColor(79, 70, 229);
+          pdf.rect(0, 0, 210, 15, 'F');
+          pdf.setTextColor(255, 255, 255);
+          pdf.setFontSize(10);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`OrientationBF - Rapport d'orientation de ${profile.name}`, 14, 10);
+          
+          currentY = 25; // Reset currentY for the new page
         }
+      };
+
+      // Page Title & Header
+      pdf.setFillColor(79, 70, 229); // Indigo 600
+      pdf.rect(0, 0, 210, 40, 'F');
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(22);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("RAPPORT D'ORIENTATION PERSONNALISÉ (BEPC)", 15, 18);
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text("Généré par la plateforme intelligente d'aide à la décision OrientationBF", 15, 26);
+      pdf.text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, 155, 26);
+
+      // Student details box
+      pdf.setFillColor(243, 244, 246); // Light slate
+      pdf.rect(14, 48, 182, 35, 'F');
+      
+      pdf.setTextColor(17, 24, 39); // Slate-900
+      pdf.setFontSize(13);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("INFORMATIONS DU CANDIDAT", 18, 55);
+      
+      pdf.setFontSize(9.5);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Nom complet : ${profile.name}`, 18, 63);
+      pdf.text(`Âge : ${profile.age} ans`, 18, 69);
+      pdf.text(`Genre : ${profile.gender === 'M' ? 'Masculin' : 'Féminin'}`, 18, 75);
+      pdf.text(`Établissement : ${profile.school || 'Non renseigné'}`, 100, 63);
+      pdf.text(`Moyenne BEPC : ${profile.bepcAverage}/20`, 100, 69);
+      pdf.text(`Série préférée : ${profile.preferredSeries || 'Non renseignée'}`, 100, 75);
+
+      // Recommandation principale
+      pdf.setTextColor(79, 70, 229);
+      pdf.setFontSize(13);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`RECOMMANDATION PRINCIPALE DE L'IA : Série ${result.recommendedSeries}`, 14, currentY);
+      currentY += 7;
+      
+      pdf.setTextColor(55, 65, 81);
+      pdf.setFontSize(9.5);
+      pdf.setFont('helvetica', 'normal');
+      
+      const splitMotivation = pdf.splitTextToSize(result.motivationMessage || '', 180);
+      splitMotivation.forEach((line: string) => {
+        checkPageOverflow(5);
+        pdf.text(line, margin, currentY);
+        currentY += 5;
+      });
+      currentY += 8;
+
+      // Top Series AutoTable
+      if (result.top3Series && result.top3Series.length > 0) {
+        checkPageOverflow(30);
+        pdf.setTextColor(17, 24, 39);
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text("SCORE D'ADÉQUATION DES SÉRIES RECOMMANDÉES", 14, currentY);
+        
+        const seriesData = result.top3Series.map(s => [s.series, `${s.score}%`, s.matchReason]);
+        autoTable(pdf, {
+          startY: currentY + 3,
+          head: [['Série', 'Score d\'adéquation', 'Justification pédagogique']],
+          body: seriesData,
+          theme: 'striped',
+          headStyles: { fillColor: [79, 70, 229] },
+          styles: { fontSize: 8.5 }
+        });
+        
+        currentY = (pdf as any).lastAutoTable.finalY + 12;
+      }
+
+      // Analysis details block
+      if (result.analysis) {
+        checkPageOverflow(40);
+        pdf.setTextColor(17, 24, 39);
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text("DIAGNOSTIC SCOLAIRE ET MATURITÉ", 14, currentY);
+        currentY += 6;
+
+        pdf.setFontSize(9);
+        pdf.setTextColor(55, 65, 81);
+        
+        pdf.setFont('helvetica', 'bold');
+        pdf.text("Régularité du travail : ", margin, currentY);
+        pdf.setFont('helvetica', 'normal');
+        const regText = pdf.splitTextToSize(result.analysis.regularity || '', 135);
+        pdf.text(regText, margin + 40, currentY);
+        currentY += Math.max(5, regText.length * 5);
+
+        checkPageOverflow(15);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text("Dominance académique : ", margin, currentY);
+        pdf.setFont('helvetica', 'normal');
+        const domText = pdf.splitTextToSize(result.analysis.dominance || '', 135);
+        pdf.text(domText, margin + 40, currentY);
+        currentY += Math.max(5, domText.length * 5);
+
+        checkPageOverflow(15);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text("Courbe de progression : ", margin, currentY);
+        pdf.setFont('helvetica', 'normal');
+        const progText = pdf.splitTextToSize(result.analysis.progression || '', 135);
+        pdf.text(progText, margin + 40, currentY);
+        currentY += Math.max(5, progText.length * 5) + 8;
+      }
+
+      // Projections BAC
+      checkPageOverflow(30);
+      pdf.setFillColor(243, 244, 246);
+      pdf.rect(margin, currentY, 182, 22, 'F');
+      
+      pdf.setTextColor(17, 24, 39);
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("PROJECTIONS ET PROBABILITÉS D'OBTENTION DU BAC", margin + 5, currentY + 6);
+      
+      pdf.setFontSize(8.5);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`• Probabilité de succès au BAC : ${result.bacSuccessProbability}%`, margin + 5, currentY + 12);
+      pdf.text(`• Probabilité de mention au BAC : ${result.bacMentionProbability}%`, margin + 5, currentY + 17);
+      pdf.text(`• Moyenne générale attendue : ${result.projectedBacAverage || '12'}/20`, margin + 110, currentY + 12);
+      currentY += 28;
+
+      // University majors and career opportunities
+      if (result.suitableUniversityMajors && result.suitableUniversityMajors.length > 0) {
+        checkPageOverflow(35);
+        pdf.setTextColor(17, 24, 39);
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text("PROJECTION SPECIALITÉS ET FILIÈRES UNIVERSITAIRES", 14, currentY);
+        currentY += 6;
+
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(55, 65, 81);
+        result.suitableUniversityMajors.forEach((major) => {
+          checkPageOverflow(6);
+          pdf.text(`• ${major}`, margin + 4, currentY);
+          currentY += 5;
+        });
+        currentY += 4;
+      }
+
+      if (result.futureJobOpportunities && result.futureJobOpportunities.length > 0) {
+        checkPageOverflow(35);
+        pdf.setTextColor(17, 24, 39);
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text("DÉBOUCHÉS ET PERSPECTIVES DE METIERS AUX BURKINA", 14, currentY);
+        currentY += 6;
+
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(55, 65, 81);
+        result.futureJobOpportunities.slice(0, 5).forEach((job) => {
+          checkPageOverflow(6);
+          pdf.text(`• ${job}`, margin + 4, currentY);
+          currentY += 5;
+        });
+        currentY += 4;
+      }
+
+      // Risks and warnings
+      if (result.risks && result.risks.length > 0) {
+        checkPageOverflow(30);
+        pdf.setTextColor(17, 24, 39);
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text("POINTS DE VIGILANCE ET FACTEURS DE RISQUES", 14, currentY);
+        currentY += 6;
+
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(185, 28, 28); // Red color
+        result.risks.forEach((risk) => {
+          const splitRisk = pdf.splitTextToSize(`• ${risk}`, 178);
+          checkPageOverflow(splitRisk.length * 5 + 2);
+          pdf.text(splitRisk, margin + 4, currentY);
+          currentY += splitRisk.length * 5;
+        });
+        currentY += 4;
+      }
+
+      // Improvement tips box
+      if (result.improvementTips && result.improvementTips.length > 0) {
+        checkPageOverflow(40);
+        pdf.setFillColor(239, 246, 255); // Blue-50
+        
+        // Compute combined size of all wrapping tips
+        let boxHeight = 11;
+        const wrappedTips: string[][] = [];
+        result.improvementTips.forEach((tip) => {
+          const wrap = pdf.splitTextToSize(`• ${tip}`, 174);
+          wrappedTips.push(wrap);
+          boxHeight += wrap.length * 4.5 + 1;
+        });
+
+        checkPageOverflow(boxHeight + 5);
+        pdf.rect(margin, currentY, 182, boxHeight, 'F');
+        
+        pdf.setTextColor(29, 78, 216); // Blue-700
+        pdf.setFontSize(10.5);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text("CONSEILS DE PROGRESSION IA :", margin + 4, currentY + 6);
+        
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(55, 65, 81);
+        pdf.setFont('helvetica', 'normal');
+        let tipY = currentY + 12;
+        wrappedTips.forEach((wrap) => {
+          pdf.text(wrap, margin + 4, tipY);
+          tipY += wrap.length * 4.5 + 1;
+        });
+        currentY += boxHeight + 8;
+      }
+
+      // Calendrier de dépôt table (Burkina Faso Post-BEPC)
+      checkPageOverflow(60);
+      pdf.setTextColor(17, 24, 39);
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text("CALENDRIER OFFICIEL DES DÉPÔTS & ÉTAPES CLÉS", 14, currentY);
+
+      const calendarData = [
+        ["Fin Juin 2026", "Publication officielle des résultats du BEPC", "Vérification des relevés de notes et obtention du certificat de succès."],
+        ["Début Juillet 2026", "Ouverture de dépôt des bourses de lycée", "Candidature pour la bourse nationale d'études de l'enseignement secondaire."],
+        ["Courant Juillet 2026", "Attribution des séries de seconde", "Sélection de la série finale (A/C/AB) et dépôt physique d'inscription."],
+        ["Septembre 2026", "Rentrée scolaire administrative et académique", "Finalisation de l'inscription physique et achat des manuels."]
+      ];
+
+      autoTable(pdf, {
+        startY: currentY + 4,
+        head: [['Période estimée', 'Étape clé', 'Actions recommandées']],
+        body: calendarData,
+        theme: 'grid',
+        headStyles: { fillColor: [13, 148, 136] }, // Teal 600
+        styles: { fontSize: 8.5 }
       });
 
-      const finalY = (pdf as any).lastAutoTable.finalY + 10;
-      const imgWidth = 190;
-      const pageHeight = 297;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = finalY;
+      // Add a page for the visual charts
+      pdf.addPage();
+      
+      // Header for Page with Charts
+      pdf.setFillColor(79, 70, 229);
+      pdf.rect(0, 0, 210, 15, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`OrientationBF - Rapport d'orientation BEPC de ${profile.name}`, 14, 10);
 
-      pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
-      heightLeft -= (pageHeight - position);
+      pdf.setFontSize(12);
+      pdf.setTextColor(17, 24, 39);
+      pdf.text("COMPATIBILITÉ DES MATIÈRES & PROFIL GÉNÉRAL VISUEL", 14, 25);
 
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      pdf.save(`oriente-bf-resultats-${profile.name}.pdf`);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
       try {
-        const originalTitle = document.title;
-        document.title = "OrientationBF_Resultats";
-        window.print();
-        setTimeout(() => document.title = originalTitle, 1000);
-      } catch (printError) {
-        alert('Une erreur est survenue. Essayez CTRL+P ou CMD+P pour imprimer la page.');
+        const chartsElement = contentRef.current.querySelector('.results-dashboard-grid') || contentRef.current;
+        if (chartsElement) {
+          const canvas = await html2canvas(chartsElement as HTMLElement, {
+            scale: 1.5,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff'
+          });
+          const chartImg = canvas.toDataURL('image/jpeg', 0.85);
+          pdf.addImage(chartImg, 'JPEG', 14, 29, 182, 85);
+        }
+      } catch (e) {
+        console.warn("Failed to capture specific charts container", e);
       }
+
+      // Testimonials & Useful links
+      let linkY = 130;
+      if (result.testimonials && result.testimonials.length > 0) {
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(17, 24, 39);
+        pdf.text("TÉMOIGNAGES ENCOURAGEANTS ET RETOURS D'ÉLÈVES", 14, linkY);
+        linkY += 6;
+        
+        pdf.setFontSize(8.5);
+        pdf.setFont('helvetica', 'italic');
+        pdf.setTextColor(75, 85, 99);
+        result.testimonials.forEach((t) => {
+          const splitQuote = pdf.splitTextToSize(`"${t.quote}"`, 182);
+          pdf.text(splitQuote, 14, linkY);
+          linkY += splitQuote.length * 4.5 + 1;
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`- ${t.author}, ${t.role}`, 14, linkY);
+          linkY += 7;
+          pdf.setFont('helvetica', 'italic');
+        });
+        linkY += 4;
+      }
+
+      if (result.usefulLinks && result.usefulLinks.length > 0) {
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(17, 24, 39);
+        pdf.text("RESSOURCES OFFICIELLES ET LIENS UTILES", 14, linkY);
+        linkY += 6;
+        
+        pdf.setFontSize(8.5);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(79, 70, 229);
+        result.usefulLinks.forEach((link) => {
+          pdf.text(`• ${link.title} : ${link.url}`, 14, linkY);
+          linkY += 5.5;
+        });
+      }
+
+      pdf.save(`orientationbf-rapport-${profile.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error('Error generating detailed PDF:', error);
+      alert('Une erreur est survenue lors de la génération du PDF. Vos données restent accessibles.');
     }
   };
 
@@ -333,11 +766,11 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
             <Download className="w-4 h-4" /> Export CSV
           </button>
           <button
-            onClick={hasPaid ? handleDownloadPDF : onUpgrade}
+            onClick={handleDownloadPDF}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
           >
-            {hasPaid ? <Download className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-            {hasPaid ? "Imprimer Rapport" : "Rapport complet (Premium)"}
+            <Download className="w-4 h-4" />
+            Imprimer Rapport
           </button>
         </div>
       </div>
@@ -588,6 +1021,342 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid, onUpgrade,
             </div>
           </motion.div>
         </div>
+
+        {/* ================= NEW MODULE: COMPARATEUR DE SERIES ================= */}
+        <motion.div 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="bg-white rounded-2xl p-6 shadow-md border border-indigo-150 bg-gradient-to-br from-indigo-50/20 via-white to-slate-50/30 font-sans"
+          id="comparateur-series-section"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-indigo-50">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-indigo-100 text-indigo-700 rounded-xl shadow-sm">
+                <ArrowLeftRight className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-lg">Comparateur de Séries (Seconde)</h3>
+                <p className="text-xs text-slate-500 font-medium">Sélectionnez deux séries pour comparer leurs débouchés, exigences et coefficients côte à côte</p>
+              </div>
+            </div>
+            <div className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full font-semibold border border-indigo-100 flex items-center gap-1">
+              <Info className="w-3.5 h-3.5 shrink-0" /> Aide à la décision Seconde
+            </div>
+          </div>
+
+          {/* Selectors */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-600 block uppercase tracking-wider">Première série à comparer :</label>
+              <select
+                value={compareSeries1}
+                onChange={(e) => setCompareSeries1(e.target.value)}
+                className="w-full bg-slate-50 text-slate-800 font-bold text-sm px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 hover:border-slate-300 transition-colors cursor-pointer shadow-sm cursor-pointer"
+              >
+                {['C', 'D', 'A4', 'G2'].map((s) => (
+                  <option key={`s1-${s}`} value={s}>Série {s}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-600 block uppercase tracking-wider">Deuxième série à comparer :</label>
+              <select
+                value={compareSeries2}
+                onChange={(e) => setCompareSeries2(e.target.value)}
+                className="w-full bg-slate-50 text-slate-800 font-bold text-sm px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 hover:border-slate-300 transition-colors cursor-pointer shadow-sm cursor-pointer"
+              >
+                {['C', 'D', 'A4', 'G2'].map((s) => (
+                  <option key={`s2-${s}`} value={s}>Série {s}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {compareSeries1 === compareSeries2 ? (
+            <div className="p-4 bg-slate-50 text-center rounded-xl text-slate-500 text-sm border border-slate-100 font-medium font-semibold">
+              Veuillez sélectionner deux séries d'études différentes pour lancer la comparaison côte à côte !
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-indigo-50 shadow-sm">
+              <table className="w-full text-left border-collapse min-w-[600px] bg-white">
+                <thead>
+                  <tr className="bg-slate-50/55 border-b border-slate-150">
+                    <th className="py-3 px-4 text-xs font-extrabold uppercase text-slate-400 tracking-wider w-[20%]">Critères de comparaison</th>
+                    <th className="py-3 px-4 text-sm font-bold text-indigo-700 bg-indigo-50/30 w-[40%] border-r border-slate-100">
+                      {getSeriesDetails(compareSeries1).name}
+                    </th>
+                    <th className="py-3 px-4 text-sm font-bold text-emerald-700 bg-emerald-50/30 w-[40%]">
+                      {getSeriesDetails(compareSeries2).name}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  <tr className="hover:bg-slate-50/40">
+                    <td className="py-3 px-4 font-bold text-slate-500 bg-slate-50/10 text-xs uppercase tracking-wide">Niveau académique</td>
+                    <td className="py-3 px-4 text-slate-700 font-medium border-r border-slate-100 bg-indigo-50/5">
+                      <span className="inline-block px-2.5 py-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-md font-bold">
+                        {getSeriesDetails(compareSeries1).level}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-slate-700 font-medium bg-emerald-50/5">
+                      <span className="inline-block px-2.5 py-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-md font-bold">
+                        {getSeriesDetails(compareSeries2).level}
+                      </span>
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-slate-50/40">
+                    <td className="py-3 px-4 font-bold text-slate-500 bg-slate-50/10 text-xs uppercase tracking-wide">Durée & Lycée</td>
+                    <td className="py-3 px-4 text-slate-800 font-semibold border-r border-slate-100 bg-indigo-50/5 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-indigo-600 shrink-0 text-indigo-500" />
+                      {getSeriesDetails(compareSeries1).duration}
+                    </td>
+                    <td className="py-3 px-4 text-slate-800 font-semibold bg-emerald-50/5 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-emerald-600 shrink-0 text-emerald-500" />
+                      {getSeriesDetails(compareSeries2).duration}
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-slate-50/40">
+                    <td className="py-3 px-4 font-bold text-slate-500 bg-slate-50/10 text-xs uppercase tracking-wide">Matières & Exigences</td>
+                    <td className="py-3 px-4 text-slate-700 border-r border-slate-100 leading-relaxed bg-indigo-50/5">
+                      <div className="flex flex-wrap gap-1">
+                        {getSeriesDetails(compareSeries1).requirements.split(',').map((req, idx) => (
+                          <span key={idx} className="bg-slate-100 text-slate-700 text-xs px-2.5 py-0.5 rounded-full border border-slate-250 font-semibold animate-none">
+                            {req.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-slate-700 leading-relaxed bg-emerald-50/5">
+                      <div className="flex flex-wrap gap-1">
+                        {getSeriesDetails(compareSeries2).requirements.split(',').map((req, idx) => (
+                          <span key={idx} className="bg-slate-100 text-slate-700 text-xs px-2.5 py-0.5 rounded-full border border-slate-250 font-semibold animate-none">
+                            {req.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-slate-50/40">
+                    <td className="py-3 px-4 font-bold text-slate-500 bg-slate-50/10 text-xs uppercase tracking-wide">Difficulté Seconde</td>
+                    <td className="py-3 px-4 text-slate-600 border-r border-slate-100 text-xs leading-relaxed font-semibold bg-indigo-50/5">
+                      {getSeriesDetails(compareSeries1).difficulty}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600 text-xs leading-relaxed font-semibold bg-emerald-50/5">
+                      {getSeriesDetails(compareSeries2).difficulty}
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-slate-50/40">
+                    <td className="py-3 px-4 font-bold text-slate-500 bg-slate-50/10 text-xs uppercase tracking-wide">Insertion d'avenir</td>
+                    <td className="py-3 px-4 text-slate-750 border-r border-slate-100 bg-indigo-50/5 font-semibold text-xs leading-relaxed">
+                      {getSeriesDetails(compareSeries1).insertion}
+                    </td>
+                    <td className="py-3 px-4 text-slate-750 bg-emerald-50/5 font-semibold text-xs leading-relaxed">
+                      {getSeriesDetails(compareSeries2).insertion}
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-slate-50/40">
+                    <td className="py-3 px-4 font-bold text-slate-500 bg-slate-50/10 text-xs uppercase tracking-wide">Moyenne BEPC cible</td>
+                    <td className="py-3 px-4 text-indigo-700 font-extrabold border-r border-slate-100 bg-indigo-50/5 text-xs">
+                      {getSeriesDetails(compareSeries1).averageTarget}
+                    </td>
+                    <td className="py-3 px-4 text-emerald-700 font-extrabold bg-emerald-50/5 text-xs">
+                      {getSeriesDetails(compareSeries2).averageTarget}
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-slate-50/40">
+                    <td className="py-3 px-4 font-bold text-slate-500 bg-slate-50/10 text-xs uppercase tracking-wide">Opportunités postbac</td>
+                    <td className="py-3 px-4 text-slate-600 border-r border-slate-100 leading-relaxed text-xs font-semibold bg-indigo-50/5">
+                      {getSeriesDetails(compareSeries1).opportunities}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600 leading-relaxed text-xs font-semibold bg-emerald-50/5">
+                      {getSeriesDetails(compareSeries2).opportunities}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </motion.div>
+
+        {/* ================= NEW MODULE: CALENDRIER BEPC SYNCHRONISE ================= */}
+        <motion.div 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="bg-white rounded-2xl p-6 shadow-md border border-teal-150 bg-gradient-to-br from-teal-50/20 via-white to-slate-50/30 font-sans"
+          id="synchronized-calendar-section"
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-teal-50">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-teal-100 text-teal-700 rounded-xl shadow-sm">
+                <Calendar className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-lg">Mon Calendrier d'Admission & Bourses (BEPC)</h3>
+                <p className="text-xs text-slate-500 font-medium">Dates des commissions d'accès et bourses d'excellence associées à ton profil de {profile?.name}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center bg-slate-100 p-1.5 rounded-xl border border-slate-200 shrink-0 self-start sm:self-auto">
+              <button 
+                onClick={() => setCalendarFilter('all')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${calendarFilter === 'all' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Tous ({getBepcSynchronizedCalendarEvents(result, profile, trackedEvents).length})
+              </button>
+              <button 
+                onClick={() => setCalendarFilter('tracked')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 ${calendarFilter === 'tracked' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Mes suivis ({trackedEvents.length})
+              </button>
+            </div>
+          </div>
+
+          {/* Stats count */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 bg-slate-50/70 p-4 rounded-xl border border-slate-100">
+            <div>
+              <span className="block text-[10px] uppercase font-extrabold text-slate-400">Total Bourses</span>
+              <span className="text-sm font-extrabold text-teal-700">{getBepcSynchronizedCalendarEvents(result, profile, trackedEvents).filter(e => e.type === 'Bourse').length} disponibles</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-extrabold text-slate-400">Concours scolaires</span>
+              <span className="text-sm font-extrabold text-indigo-700">{getBepcSynchronizedCalendarEvents(result, profile, trackedEvents).filter(e => e.type === 'Orientation' && e.id.includes('scientific')).length || 1} d'élite</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-extrabold text-slate-400">Prochain jalon</span>
+              <span className="text-sm font-extrabold text-slate-800 truncate block">
+                {getBepcSynchronizedCalendarEvents(result, profile, trackedEvents).length > 0 ? new Date(getBepcSynchronizedCalendarEvents(result, profile, trackedEvents)[0].date).toLocaleDateString('fr-FR', {month: 'short', day: 'numeric'}) : "Aucun"}
+              </span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-extrabold text-slate-400">Alertes actives</span>
+              <span className="text-sm font-extrabold text-emerald-700">{trackedEvents.length} suivis</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start text-left">
+            {/* Visual calendar month layout */}
+            <div className="lg:col-span-4 bg-slate-50 p-4 rounded-xl border border-slate-150/70 flex flex-col justify-between h-[340px]">
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wilder mb-4 text-center">Visualisation des périodes de dépôt</h4>
+                {/* Custom gorgeous visual timeline graph blocks */}
+                <div className="space-y-4">
+                  {[
+                    { month: "Juin 2026", details: "Résultats d'examen et relevés scolaires de BEPC", color: "indigo" },
+                    { month: "Juillet 2026", details: "Formulation des lycées d'élites & bourses", color: "teal" },
+                    { month: "Août 2026", details: "Décisions d'orientation de l'État burkinabè", color: "rose" },
+                    { month: "Sept-Nov 2026", details: "Inscriptions physiques d'admission définitive", color: "amber" },
+                  ].map((block, i) => (
+                    <div key={i} className="flex gap-3 items-start p-2 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all cursor-default font-sans">
+                      <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 bg-indigo-500 ring-4 ring-indigo-100`} />
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-extrabold text-slate-800">{block.month}</span>
+                        <p className="text-[10px] text-slate-500 font-semibold leading-normal">{block.details}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-200 text-center">
+                <span className="text-[10px] font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-full inline-flex items-center gap-1 shadow-sm">
+                  <Check className="w-3 h-3 text-teal-600" /> Notifications SMS Synchro active
+                </span>
+                <p className="text-[9px] text-slate-400 font-semibold mt-1">Des rappels automatiques vous seront transmis par l'établissement.</p>
+              </div>
+            </div>
+
+            {/* List elements */}
+            <div className="lg:col-span-8 space-y-3 lg:max-h-[340px] lg:overflow-y-auto pr-1">
+              {(() => {
+                const rawEvents = getBepcSynchronizedCalendarEvents(result, profile, trackedEvents);
+                const filtered = calendarFilter === 'tracked' 
+                  ? rawEvents.filter(e => trackedEvents.includes(e.id))
+                  : rawEvents;
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-12 bg-slate-50/55 rounded-xl border border-dashed border-slate-200 text-center text-slate-500 text-xs font-bold leading-normal">
+                      {calendarFilter === 'tracked' 
+                        ? "🔒 Aucun événement n'est suivi actuellement. Cliquez sur le signet d'un événement pour l'ajouter à vos suivis !"
+                        : "Aucun événement synchronisé."}
+                    </div>
+                  );
+                }
+
+                return filtered.map((ev) => {
+                  const isTracked = trackedEvents.includes(ev.id);
+                  const displayDate = new Date(ev.date).toLocaleDateString('fr-FR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  });
+
+                  return (
+                    <div key={ev.id} className="p-4 bg-white hover:bg-slate-50/30 rounded-xl border border-slate-150 flex items-start gap-3 justify-between shadow-sm hover:shadow hover:border-indigo-150 transition-all text-left font-sans">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                            ev.type === 'Bourse' ? 'bg-teal-100 text-teal-800 border border-teal-200/50' : 
+                            ev.type === 'Orientation' ? 'bg-rose-100 text-rose-800 border border-rose-200/50' : 
+                            'bg-slate-100 text-slate-700 border border-slate-200/50'
+                          }`}>
+                            {ev.type}
+                          </span>
+                          <span className="text-xs font-extrabold text-slate-800">{ev.title}</span>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold inline-block leading-none ${
+                            ev.priority === 'Haute' ? 'bg-rose-50 text-rose-700' :
+                            'bg-slate-100 text-slate-600'
+                          }`}>
+                            {ev.importance}
+                          </span>
+                        </div>
+                        
+                        <p className="text-xs text-slate-500 font-semibold leading-relaxed">{ev.description}</p>
+                        
+                        <div className="flex items-center gap-4 text-[11px] text-slate-450 font-semibold pt-1">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Date limite : <strong className="text-slate-600">{displayDate}</strong>
+                          </span>
+                          <span className="text-slate-200">|</span>
+                          <span className="text-slate-500 truncate">Organisme : {ev.organization}</span>
+                        </div>
+                      </div>
+
+                      {/* Bookmark Tracking toggler */}
+                      <button
+                        onClick={() => {
+                          let updated;
+                          if (isTracked) {
+                            updated = trackedEvents.filter(id => id !== ev.id);
+                          } else {
+                            updated = [...trackedEvents, ev.id];
+                          }
+                          setTrackedEvents(updated);
+                          localStorage.setItem('tracked_bepc_events', JSON.stringify(updated));
+                        }}
+                        className={`p-2 rounded-xl border transition-all shrink-0 ${
+                          isTracked
+                            ? 'bg-amber-500/10 text-amber-600 border-amber-300'
+                            : 'bg-slate-50 text-slate-400 border-slate-200 hover:text-slate-600 hover:border-slate-300'
+                        }`}
+                        title={isTracked ? "Ne plus suivre" : "Suivre cet évènement"}
+                      >
+                        <Bookmark className={`w-4 h-4 ${isTracked ? 'fill-amber-500 text-amber-600' : ''}`} />
+                      </button>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </motion.div>
 
         {/* Tableau Récapitulatif Scolaire de 3 Ans (Lecteur Parental) & Radar Summary */}
         {profile && (

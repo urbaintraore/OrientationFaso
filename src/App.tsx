@@ -22,21 +22,23 @@ import { PricingPage } from './components/PricingPage';
 import { ProjectList } from './components/ProjectList';
 import { MarketplaceHub } from './components/marketplace/MarketplaceHub';
 import { InstitutionDetails } from './components/marketplace/InstitutionDetails';
+import { StudentMarketplace } from './components/marketplace/StudentMarketplace';
 import { EstablishmentDashboard } from './components/establishment/EstablishmentDashboard';
 import { ScholarshipHub } from './components/opportunities/ScholarshipHub';
 import { AboutPage } from './components/AboutPage';
 import { LiveChatWidget } from './components/LiveChatWidget';
 import { QuizHub } from './components/quiz/QuizHub';
 import { FormationsHub } from './components/FormationsHub';
+import { MyAlerts } from './components/MyAlerts';
 import { analyzeProfile, analyzePostBacProfile } from './services/gemini';
 import { careerGatheringService } from './services/careerGatheringService';
 import { StudentProfile, AnalysisResult, PostBacProfile, UniversityAnalysisResult, SavedProject, UserProfile } from './types';
 import { motion, AnimatePresence } from 'motion/react';
-import { School, GraduationCap, Building2 } from 'lucide-react';
+import { School, GraduationCap, Building2, Sparkles, ChevronRight, Check } from 'lucide-react';
 
 import { auth, db, requestNotificationPermission, isFirebaseConfigured } from './lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, onSnapshot, deleteDoc, updateDoc } from 'firebase/firestore';
 
 async function testFirebaseConnection() {
   if (!isFirebaseConfigured) {
@@ -54,7 +56,53 @@ async function testFirebaseConnection() {
   }
 }
 
-type ViewState = 'hero' | 'mode-selection' | 'auth' | 'payment' | 'form-bepc' | 'form-bac' | 'results-bepc' | 'results-bac' | 'methodology' | 'admin-dashboard' | 'establishment-dashboard' | 'pricing' | 'project-list' | 'marketplace' | 'institution-details' | 'scholarships' | 'about' | 'useful-links' | 'quiz-hub' | 'formations';
+type ViewState = 'hero' | 'mode-selection' | 'auth' | 'payment' | 'form-bepc' | 'form-bac' | 'results-bepc' | 'results-bac' | 'methodology' | 'admin-dashboard' | 'establishment-dashboard' | 'pricing' | 'project-list' | 'alerts' | 'marketplace' | 'student-marketplace' | 'institution-details' | 'scholarships' | 'about' | 'useful-links' | 'quiz-hub' | 'formations';
+
+interface TourStepData {
+  step: number;
+  title: string;
+  message: string;
+  highlight: string;
+  badge: string;
+}
+
+const TOUR_STEPS: TourStepData[] = [
+  {
+    step: 1,
+    title: "Bienvenue sur OrientationBF ! 🚀",
+    message: "Découvrez notre plateforme d'orientation scolaire intelligente alimentée par l'IA au Burkina Faso. Laissez-nous vous guider en 5 étapes simples !",
+    highlight: "Sachez que vous pouvez quitter la visite guidée à tout moment.",
+    badge: "Introduction"
+  },
+  {
+    step: 2,
+    title: "1. Profil d'Orientation Scientifique 🎯",
+    message: "Saisissez vos notes scolaires pour obtenir des recommandations d'orientation personnalisées (BEPC pour le lycée, BAC pour l'université).",
+    highlight: "La simulation IA estime vos chances d'admission dans chaque parcours.",
+    badge: "Analyse IA"
+  },
+  {
+    step: 3,
+    title: "2. Écoles & Universités (Marketplace) 🏫",
+    message: "Explorez notre répertoire intelligent de grandes écoles, universités et lycées d'excellence, au Burkina Faso comme à l'étranger.",
+    highlight: "Visualisez les frais d'inscription exacts, les filières agréées CAMES et les adresses.",
+    badge: "Marketplace"
+  },
+  {
+    step: 4,
+    title: "3. Sauvegarde de Projets & PDF 💾",
+    message: "Retrouvez ici toutes vos fiches de recommandation générées, vos bourses d'études favorites ou universités enregistrées.",
+    highlight: "Exportez-les instantanément en rapports PDF professionnels pour vos dossiers de candidature.",
+    badge: "Sauvegarde"
+  },
+  {
+    step: 5,
+    title: "Prêt pour le grand départ ! 🎉",
+    message: "Vous détenez maintenant toutes les clés pour prendre le contrôle de votre parcours et viser l'excellence académique !",
+    highlight: "Fermez ce guide et commencez dès aujourd'hui vos simulations d'orientation.",
+    badge: "C'est parti !"
+  }
+];
 
 export default function App() {
   const [view, setView] = useState<ViewState>('hero');
@@ -73,6 +121,17 @@ export default function App() {
     return localStorage.getItem('orientationbf_admin') === 'true';
   });
 
+  const getSubscriptionDate = (userProfileData: any): Date | null => {
+    if (!userProfileData?.paymentDate) return null;
+    const pDate = userProfileData.paymentDate;
+    if (pDate.seconds) {
+      return new Date(pDate.seconds * 1000);
+    } else if (pDate.toDate && typeof pDate.toDate === 'function') {
+      return pDate.toDate();
+    }
+    return new Date(pDate);
+  };
+
   useEffect(() => {
     if (!isFirebaseConfigured) {
       // Offline / Local Demo mode state sync
@@ -80,12 +139,28 @@ export default function App() {
       if (cachedProfile) {
         try {
           const profileData = JSON.parse(cachedProfile);
+          
+          let activeHasPaid = !!profileData.hasPaid;
+          if (profileData.hasPaid && profileData.paymentDate) {
+            const subDate = getSubscriptionDate(profileData);
+            if (subDate) {
+              const now = new Date();
+              const diffTime = now.getTime() - subDate.getTime();
+              const diffDays = diffTime / (1000 * 60 * 60 * 24);
+              if (diffDays > 30) {
+                activeHasPaid = false;
+                profileData.hasPaid = false;
+                profileData.paymentStatus = 'none';
+                profileData.testsRunCount = 0;
+                localStorage.setItem('orientationbf_demo_user_profile', JSON.stringify(profileData));
+              }
+            }
+          }
+          
           setUserProfile(profileData);
+          setHasPaid(activeHasPaid);
           if (profileData.profileType === 'etablissement') {
             setIsEstablishment(true);
-          }
-          if (profileData.hasPaid) {
-            setHasPaid(true);
           }
         } catch (e) {
           console.error("Failed to parse cached profile", e);
@@ -94,7 +169,7 @@ export default function App() {
         // Fallback demo profile matching the stored role state
         const isCurrentlyAdmin = localStorage.getItem('orientationbf_admin') === 'true';
         const profileData: UserProfile = {
-          uid: isCurrentlyAdmin ? 'demo-admin-uid' : 'demo-local-user',
+          uid: 'demo-local-user',
           email: isCurrentlyAdmin ? 'admin@orientationbf.com' : 'demo@orientationbf.com',
           displayName: isCurrentlyAdmin ? 'Administrateur OrientationBF' : 'Utilisateur Démo',
           profileType: isCurrentlyAdmin ? 'system_admin' : 'student',
@@ -121,7 +196,7 @@ export default function App() {
           requestNotificationPermission().then(token => {
              if (token) {
                console.log("FCM Token:", token);
-               // You would typically save this token to the user's profile in Firestore here
+               // save this token to the user's profile in Firestore
                setDoc(doc(db, 'users', user.uid), { fcmToken: token }, { merge: true });
              }
           });
@@ -129,13 +204,38 @@ export default function App() {
           const profileRef = doc(db, 'users', user.uid);
           
           // Use onSnapshot for real-time profile updates (like payment validation)
-          const profileUnsubscribe = onSnapshot(profileRef, (docSnap) => {
+          const profileUnsubscribe = onSnapshot(profileRef, async (docSnap) => {
             if (docSnap.exists()) {
               const profileData = docSnap.data() as UserProfile;
-              setUserProfile(profileData);
-              if (profileData.hasPaid) {
-                setHasPaid(true);
+              
+              let activeHasPaid = !!profileData.hasPaid;
+              if (profileData.hasPaid && profileData.paymentDate) {
+                const subDate = getSubscriptionDate(profileData);
+                if (subDate) {
+                  const now = new Date();
+                  const diffTime = now.getTime() - subDate.getTime();
+                  const diffDays = diffTime / (1000 * 60 * 60 * 24);
+                  if (diffDays > 30) {
+                    activeHasPaid = false;
+                    console.log("Subscription expired (over 30 days). Resetting paid status.");
+                    setHasPaid(false);
+                    setUserProfile({ ...profileData, hasPaid: false, paymentStatus: 'none', testsRunCount: 0 });
+                    try {
+                      await updateDoc(profileRef, {
+                        hasPaid: false,
+                        paymentStatus: 'none',
+                        testsRunCount: 0
+                      });
+                    } catch (err) {
+                      console.error("Error auto-updating expired payment status in firestore", err);
+                    }
+                    return;
+                  }
+                }
               }
+              
+              setUserProfile(profileData);
+              setHasPaid(activeHasPaid);
               if (profileData.profileType === 'etablissement') {
                 setIsEstablishment(true);
               }
@@ -186,7 +286,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isAuthenticated && auth.currentUser) {
+    if (isFirebaseConfigured && isAuthenticated && auth.currentUser) {
       const q = query(
         collection(db, 'saved_projects'),
         where('userId', '==', auth.currentUser.uid)
@@ -197,6 +297,7 @@ export default function App() {
         snapshot.forEach((doc) => {
           projects.push(doc.data() as SavedProject);
         });
+        projects.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setSavedProjects(projects);
       }, (err) => {
         console.error("Error listening to saved projects:", err);
@@ -204,9 +305,21 @@ export default function App() {
       
       return () => unsubscribe();
     } else {
-      setSavedProjects([]);
+      const localProjects = localStorage.getItem('orientationbf_local_saved_projects');
+      if (localProjects) {
+        try {
+          const parsed = JSON.parse(localProjects) as SavedProject[];
+          parsed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          setSavedProjects(parsed);
+        } catch (e) {
+          console.error("Failed to parse local projects", e);
+          setSavedProjects([]);
+        }
+      } else {
+        setSavedProjects([]);
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isFirebaseConfigured]);
 
   useEffect(() => {
     localStorage.setItem('orientationbf_user', String(isAuthenticated));
@@ -220,6 +333,124 @@ export default function App() {
     localStorage.setItem('orientationbf_haspaid', String(hasPaid));
   }, [hasPaid]);
 
+  // Student statistics state
+  const [viewedScholarshipsCount, setViewedScholarshipsCount] = useState<number>(() => {
+    try {
+      const viewedStr = localStorage.getItem('orientationbf_viewed_scholarships');
+      if (viewedStr) {
+        const parsed = JSON.parse(viewedStr);
+        if (Array.isArray(parsed)) return parsed.length;
+      } else {
+        const initial = ["bourse-001", "bourse-002", "bourse-003"];
+        localStorage.setItem('orientationbf_viewed_scholarships', JSON.stringify(initial));
+        return 3;
+      }
+    } catch {}
+    return 3;
+  });
+
+  const [activeAlertsCount, setActiveAlertsCount] = useState<number>(() => {
+    try {
+      const cached = localStorage.getItem('orientationbf_local_notifications');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((n: any) => !n.isRead).length;
+        }
+      }
+    } catch {}
+    return 3;
+  });
+
+  useEffect(() => {
+    const handleViewedUpdate = () => {
+      try {
+        const viewedStr = localStorage.getItem('orientationbf_viewed_scholarships');
+        if (viewedStr) {
+          const parsed = JSON.parse(viewedStr);
+          if (Array.isArray(parsed)) {
+            setViewedScholarshipsCount(parsed.length);
+          }
+        }
+      } catch (e) {
+        console.error("Error reading viewed list", e);
+      }
+    };
+    window.addEventListener('orientationbf_scholarship_viewed', handleViewedUpdate);
+
+    const checkAlerts = () => {
+      try {
+        const cached = localStorage.getItem('orientationbf_local_notifications');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            setActiveAlertsCount(parsed.filter((n: any) => !n.isRead).length);
+          }
+        }
+      } catch {}
+    };
+
+    checkAlerts();
+    const interval = setInterval(checkAlerts, 5450);
+
+    return () => {
+      window.removeEventListener('orientationbf_scholarship_viewed', handleViewedUpdate);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Guided Tour State
+  const [tourStep, setTourStep] = useState<number | null>(null);
+
+  const startGuidedTour = () => {
+    setTourStep(1);
+    setView('hero');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleNextTourStep = () => {
+    if (tourStep === null) return;
+    const nextStep = tourStep + 1;
+    if (nextStep > 5) {
+      setTourStep(null);
+      setView('hero');
+    } else {
+      setTourStep(nextStep);
+      if (nextStep === 2) {
+        setView('mode-selection');
+      } else if (nextStep === 3) {
+        setView('marketplace');
+      } else if (nextStep === 4) {
+        setView('project-list');
+      } else if (nextStep === 5) {
+        setView('hero');
+      }
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handlePrevTourStep = () => {
+    if (tourStep === null || tourStep === 1) return;
+    const prevStep = tourStep - 1;
+    setTourStep(prevStep);
+    if (prevStep === 1) {
+      setView('hero');
+    } else if (prevStep === 2) {
+      setView('mode-selection');
+    } else if (prevStep === 3) {
+      setView('marketplace');
+    } else if (prevStep === 4) {
+      setView('project-list');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleEndTour = () => {
+    setTourStep(null);
+    setView('hero');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleStart = () => {
     setView('mode-selection');
     setError(null);
@@ -230,6 +461,54 @@ export default function App() {
     setView('pricing');
     setError(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const checkSubAndLimit = (): { allowed: boolean; reason?: 'expired' | 'limit_reached' } => {
+    if (!hasPaid) {
+      return { allowed: true };
+    }
+
+    if (userProfile?.paymentDate) {
+      const subDate = getSubscriptionDate(userProfile);
+      if (subDate) {
+        const now = new Date();
+        const diffTime = now.getTime() - subDate.getTime();
+        const diffDays = diffTime / (1000 * 60 * 60 * 24);
+        if (diffDays > 30) {
+          return { allowed: false, reason: 'expired' };
+        }
+      }
+    }
+
+    const count = userProfile?.testsRunCount || 0;
+    if (count >= 2) {
+      return { allowed: false, reason: 'limit_reached' };
+    }
+
+    return { allowed: true };
+  };
+
+  const incrementTestCount = async () => {
+    if (!hasPaid) return;
+
+    const currentCount = userProfile?.testsRunCount || 0;
+    const nextCount = currentCount + 1;
+    
+    // Update local profile state
+    const updatedProfile = { ...userProfile, testsRunCount: nextCount };
+    setUserProfile(updatedProfile as UserProfile);
+
+    // Persist to DB or local storage
+    if (isFirebaseConfigured && auth.currentUser) {
+      try {
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        await updateDoc(userRef, { testsRunCount: nextCount });
+      } catch (err) {
+        console.error("Error updating test run count in firestore:", err);
+      }
+    } else {
+      localStorage.setItem('orientationbf_demo_user_profile', JSON.stringify(updatedProfile));
+    }
   };
 
   const handleSelectMode = (mode: 'bepc' | 'bac') => {
@@ -304,12 +583,29 @@ export default function App() {
 
   const handleBepcSubmit = async (profile: StudentProfile) => {
     console.log("Starting BEPC analysis for profile:", profile);
-    setIsLoading(true);
     setError(null);
+    
+    // Check subscription & limit
+    const subCheck = checkSubAndLimit();
+    if (!subCheck.allowed) {
+      if (subCheck.reason === 'expired') {
+        setError("Votre abonnement de 30 jours a expiré. Veuillez le renouveler pour continuer à générer des analyses d'orientation scolaires.");
+      } else {
+        setError("🔒 Limite d'orientation atteinte (2 tests maximum par abonnement) : Chaque abonnement de 30 jours donne droit à un maximum de deux (2) analyses d'orientation d'élèves différents. Afin de prévenir le partage abusif de compte, veuillez renouveler votre abonnement pour tester d'autres profils. Vos précédents tests restent consultables gratuitement dans votre 'Espace Projets'.");
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    setIsLoading(true);
     setBepcProfile(profile);
     try {
       const result = await analyzeProfile(profile);
       console.log("BEPC Analysis result received:", result);
+      
+      // Increment test count upon successful analysis
+      await incrementTestCount();
+      
       setBepcAnalysis(result);
       setView('results-bepc');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -323,8 +619,21 @@ export default function App() {
 
   const handleBacSubmit = async (profile: PostBacProfile) => {
     console.log("Starting BAC analysis for profile:", profile);
-    setIsLoading(true);
     setError(null);
+
+    // Check subscription & limit
+    const subCheck = checkSubAndLimit();
+    if (!subCheck.allowed) {
+      if (subCheck.reason === 'expired') {
+        setError("Votre abonnement de 30 jours a expiré. Veuillez le renouveler pour continuer à générer des analyses d'orientation scolaires.");
+      } else {
+        setError("🔒 Limite d'orientation atteinte (2 tests maximum par abonnement) : Chaque abonnement de 30 jours donne droit à un maximum de deux (2) analyses d'orientation d'élèves différents. Afin de prévenir le partage abusif de compte, veuillez renouveler votre abonnement pour tester d'autres profils. Vos précédents tests restent consultables gratuitement dans votre 'Espace Projets'.");
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    setIsLoading(true);
     setBacProfile(profile);
     try {
       // Fetch careers from DB to use as context for AI
@@ -345,6 +654,10 @@ export default function App() {
 
       const result = await analyzePostBacProfile(profile, dbCareersContext);
       console.log("BAC Analysis result received:", result);
+      
+      // Increment test count upon successful analysis
+      await incrementTestCount();
+      
       setBacAnalysis(result);
       setView('results-bac');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -386,26 +699,49 @@ export default function App() {
   };
 
   const handleSaveProject = async () => {
-    if (!isAuthenticated || !auth.currentUser) {
-      setView('auth');
-      return;
-    }
-
     setIsLoading(true);
     const projectId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+    
+    // Determine user ID
+    const userId = (isFirebaseConfigured && auth.currentUser)
+      ? auth.currentUser.uid
+      : (userProfile?.uid || 'demo-local-user');
+
     const newProject: SavedProject = {
       id: projectId,
-      userId: auth.currentUser.uid,
+      userId: userId,
       type: selectedMode || 'bepc',
-      name: `Projet ${selectedMode === 'bepc' ? 'BEPC' : 'BAC'} - ${new Date().toLocaleDateString()}`,
+      name: `Projet ${selectedMode === 'bepc' ? 'BEPC' : 'BAC'} - ${new Date().toLocaleDateString('fr-FR')}`,
       date: new Date().toISOString(),
       profile: (selectedMode === 'bepc' ? bepcProfile : bacProfile)!,
       result: (selectedMode === 'bepc' ? bepcAnalysis : bacAnalysis)!
     };
 
     try {
-      await setDoc(doc(db, 'saved_projects', projectId), newProject);
+      if (isFirebaseConfigured && auth.currentUser) {
+        await setDoc(doc(db, 'saved_projects', projectId), newProject);
+      }
+      
+      // Always store in localStorage as safety / offline fallback
+      const localStr = localStorage.getItem('orientationbf_local_saved_projects');
+      let localProjects: SavedProject[] = [];
+      if (localStr) {
+        try {
+          localProjects = JSON.parse(localStr);
+        } catch (e) {
+          console.error("Error parsing local projects in handleSaveProject", e);
+        }
+      }
+      localProjects.unshift(newProject);
+      localStorage.setItem('orientationbf_local_saved_projects', JSON.stringify(localProjects));
+
+      // Synchronize in-memory state for local testing/demo fallback instantly
+      if (!isFirebaseConfigured || !auth.currentUser) {
+        setSavedProjects(localProjects);
+      }
+
       alert('Projet sauvegardé avec succès !');
+      setView('project-list');
     } catch (error) {
       console.error("Error saving project:", error);
       alert('Erreur lors de la sauvegarde du projet.');
@@ -416,7 +752,25 @@ export default function App() {
 
   const handleDeleteProject = async (projectId: string) => {
     try {
-      await deleteDoc(doc(db, 'saved_projects', projectId));
+      if (isFirebaseConfigured && auth.currentUser) {
+        await deleteDoc(doc(db, 'saved_projects', projectId));
+      }
+      
+      const localStr = localStorage.getItem('orientationbf_local_saved_projects');
+      if (localStr) {
+        try {
+          const localProjects = JSON.parse(localStr) as SavedProject[];
+          const filtered = localProjects.filter(p => p.id !== projectId);
+          localStorage.setItem('orientationbf_local_saved_projects', JSON.stringify(filtered));
+          
+          if (!isFirebaseConfigured || !auth.currentUser) {
+            setSavedProjects(filtered);
+          }
+        } catch (e) {
+          console.error("Failed to parse local projects on delete", e);
+        }
+      }
+      alert('Projet supprimé avec succès !');
     } catch (error) {
       console.error("Error deleting project:", error);
       alert('Erreur lors de la suppression du projet.');
@@ -452,7 +806,9 @@ export default function App() {
         onLogout={handleLogout}
         onPricing={handlePricing}
         onProjects={() => setView('project-list')}
+        onAlerts={() => setView('alerts')}
         onMarketplace={() => setView('marketplace')}
+        onStudentMarketplace={() => setView('student-marketplace')}
         onScholarships={() => setView('scholarships')}
         onUsefulLinks={() => setView('useful-links')}
         onAdmin={() => setView('admin-dashboard')}
@@ -512,7 +868,13 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <Hero onStart={handleStart} />
+              <Hero 
+                onStart={handleStart} 
+                savedProjectsCount={savedProjects.length}
+                viewedScholarshipsCount={viewedScholarshipsCount}
+                activeAlertsCount={activeAlertsCount}
+                onStartTour={startGuidedTour}
+              />
               <Partners />
               <SuccessStories />
               <ScholarshipLanding onExplore={(query) => {
@@ -727,6 +1089,17 @@ export default function App() {
             </motion.div>
           )}
 
+          {view === 'alerts' && (
+            <motion.div
+              key="alerts"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <MyAlerts />
+            </motion.div>
+          )}
+
           {view === 'methodology' && (
             <motion.div
               key="methodology"
@@ -774,6 +1147,17 @@ export default function App() {
                   setView('institution-details');
                 }}
               />
+            </motion.div>
+          )}
+
+          {view === 'student-marketplace' && (
+            <motion.div
+              key="student-marketplace"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <StudentMarketplace onLogin={() => setView('auth')} />
             </motion.div>
           )}
 
@@ -865,6 +1249,69 @@ export default function App() {
 
       {/* Live Chat & Support Support Widgets */}
       <LiveChatWidget />
+
+      {/* Visite Guidée (Tour) Widget Overlay */}
+      {tourStep !== null && (
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="fixed bottom-24 right-6 z-50 max-w-sm w-[calc(100vw-2rem)] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border-2 border-indigo-500 p-6 shadow-indigo-150/40 dark:shadow-none transition-all duration-300"
+          style={{ animation: 'bounce 2.5s infinite' }}
+        >
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <span className="px-2.5 py-1 text-[10px] bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 font-extrabold uppercase tracking-widest rounded-lg">
+              {TOUR_STEPS[tourStep - 1]?.badge || "Visite"}
+            </span>
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 font-bold font-mono">
+              <span>{tourStep}</span>
+              <span>/</span>
+              <span>5</span>
+            </div>
+          </div>
+
+          <h4 className="text-base font-black text-slate-900 dark:text-white leading-tight mb-2 flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+            {TOUR_STEPS[tourStep - 1]?.title}
+          </h4>
+
+          <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed mb-3">
+            {TOUR_STEPS[tourStep - 1]?.message}
+          </p>
+
+          <div className="p-3 bg-indigo-50/40 dark:bg-slate-950 rounded-xl mb-4 border border-indigo-100/50 dark:border-slate-850">
+            <p className="text-[11px] font-medium text-slate-600 dark:text-slate-400 leading-snug">
+              ℹ️ {TOUR_STEPS[tourStep - 1]?.highlight}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+            <button
+              onClick={handleEndTour}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-all rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              Fermer
+            </button>
+            
+            <div className="flex gap-2">
+              {tourStep > 1 && (
+                <button
+                  onClick={handlePrevTourStep}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-705 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all"
+                >
+                  Précédent
+                </button>
+              )}
+              
+              <button
+                onClick={handleNextTourStep}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-200 dark:shadow-none transition-all flex items-center gap-1"
+              >
+                {tourStep === 5 ? "Terminer" : "Suivant"}
+                {tourStep < 5 && <ChevronRight className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* WhatsApp Floating Button */}
       <a

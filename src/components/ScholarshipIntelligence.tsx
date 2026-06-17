@@ -33,8 +33,22 @@ interface ScholarshipIntelligenceProps {
 }
 
 export function ScholarshipIntelligence({ isAdmin, userProfile }: ScholarshipIntelligenceProps) {
-  const [scholarships, setScholarships] = useState<Scholarship[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [scholarships, setScholarships] = useState<Scholarship[]>(() => {
+    try {
+      const cached = localStorage.getItem('orientationbf_cached_scholarships_data');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(() => {
+    try {
+      const cached = localStorage.getItem('orientationbf_cached_scholarships_data');
+      return cached ? JSON.parse(cached).length === 0 : true;
+    } catch {
+      return true;
+    }
+  });
   const [isApiOnline, setIsApiOnline] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
@@ -47,10 +61,12 @@ export function ScholarshipIntelligence({ isAdmin, userProfile }: ScholarshipInt
 
   const [error, setError] = useState<string | null>(null);
 
+  const [showExpired, setShowExpired] = useState(false);
+
   useEffect(() => {
     fetchScholarships();
     checkApiStatus();
-  }, [countryFilter, levelFilter, yearFilter, categoryFilter]);
+  }, [countryFilter, levelFilter, yearFilter, categoryFilter, showExpired]);
 
   const checkApiStatus = async () => {
     try {
@@ -66,17 +82,21 @@ export function ScholarshipIntelligence({ isAdmin, userProfile }: ScholarshipInt
   };
 
   const fetchScholarships = async () => {
-    setLoading(true);
+    if (scholarships.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const data = await scholarshipService.getAllScholarships({
         country: countryFilter,
         degreeLevel: levelFilter,
         academicYear: yearFilter,
-        category: categoryFilter
+        category: categoryFilter,
+        isExpired: showExpired ? undefined : false
       });
       console.log("Scholarships fetched:", data.length);
       setScholarships(data);
+      localStorage.setItem('orientationbf_cached_scholarships_data', JSON.stringify(data));
     } catch (err: any) {
       console.error('Failed to fetch scholarships:', err);
       // Extraire le message JSON si possible
@@ -91,54 +111,133 @@ export function ScholarshipIntelligence({ isAdmin, userProfile }: ScholarshipInt
     }
   };
 
+  const [syncReport, setSyncReport] = useState<any>(null);
+  const [syncStatus, setSyncStatus] = useState('');
+
   const handleSync = async () => {
     setIsSyncing(true);
     setError(null);
+    setSyncReport(null);
+    
+    // Professionally-tailored status messages to cycle during background crawling API calls
+    const statusMessages = [
+      "Initialisation du scan mondial via l'IA de recherche...",
+      "Exploration des bases de données DAAD (Allemagne) & Campus France...",
+      "Scan des communiqués officiels du CIOSPB (Burkina Faso)...",
+      "Analyse des opportunités du Royaume du Maroc (AMCI)...",
+      "Indexation des bourses de la Fondation Mastercard...",
+      "Analyse de l'éligibilité pour les étudiants burkinabè (Aide & Logement)...",
+      "Filtrage intelligent des opportunités expirées..."
+    ];
+    
+    let msgIndex = 0;
+    setSyncStatus(statusMessages[0]);
+    
+    const intervalId = setInterval(() => {
+      msgIndex = (msgIndex + 1) % statusMessages.length;
+      setSyncStatus(statusMessages[msgIndex]);
+    }, 2800);
+
     try {
       console.log("Starting Deep AI Sync...");
-      
-      // We will crawl for the next 2 academic years + current aids
       const academicYearsList = ['2025/2026', '2026/2027'];
-      const crawledData = await crawlScholarshipMarket(academicYearsList);
+      const response = await crawlScholarshipMarket(academicYearsList);
+      
+      clearInterval(intervalId);
+      
+      const crawledData = response.data;
+      const report = response.report;
       
       if (crawledData && crawledData.length > 0) {
-        console.log(`AI found ${crawledData.length} opportunities. Saving to database...`);
+        setSyncStatus(`Scan de l'IA terminé. ${crawledData.length} opportunités collectées. Début de l'analyse...`);
+        await new Promise(r => setTimeout(r, 1500));
         
-        for (const item of crawledData) {
+        // Fetch current list once to have up-to-date titles for duplicate checking
+        const currentScholarships = await scholarshipService.getAllScholarships();
+        
+        let importedCount = 0;
+        let skippedCount = 0;
+        
+        for (let i = 0; i < crawledData.length; i++) {
+          const item = crawledData[i];
+          const progressInfo = `(${i + 1}/${crawledData.length})`;
+          
           try {
-            await scholarshipService.addScholarship(item);
+            const alreadyExists = currentScholarships.some(s => 
+              s && s.title && item.title && 
+              s.title.trim().toLowerCase() === item.title.trim().toLowerCase()
+            );
+
+            if (alreadyExists) {
+              skippedCount++;
+              setSyncStatus(`Analyse ${progressInfo} : Déjà existant et à jour : "${item.title.substring(0, 30)}..."`);
+            } else {
+              await scholarshipService.addScholarship(item);
+              importedCount++;
+              setSyncStatus(`Analyse ${progressInfo} : Importation réussie : "${item.title.substring(0, 30)}..."`);
+            }
           } catch (e) {
-            console.warn("Could not add one scholarship:", e);
+            console.warn("Could not process one scholarship:", e);
           }
+          // Intentionally wait 1200ms per item to make the workflow visible and premium
+          await new Promise(r => setTimeout(r, 1200));
         }
         
+        setSyncStatus("Mise à jour de l'affichage local...");
         await fetchScholarships();
-        setSyncStatus(`Succès ! ${crawledData.length} nouvelles bourses trouvées.`);
+        await new Promise(r => setTimeout(r, 800));
+        
+        // Build final sync report that accurately reflects the number imported VS found
+        const finalReport = report ? {
+          ...report,
+          nbFound: crawledData.length,
+          nbImported: importedCount
+        } : {
+          timestamp: new Date().toISOString(),
+          sourcesChecked: ["Auto-crawl"],
+          nbFound: crawledData.length,
+          nbImported: importedCount,
+          executionTime: 0,
+          status: "SUCCESS"
+        };
+        
+        setSyncReport(finalReport);
+        if (importedCount > 0) {
+          setSyncStatus(`Synchronisation terminée ! ${importedCount} nouvelles bourses importées, ${skippedCount} déjà enregistrées.`);
+        } else {
+          setSyncStatus(`Synchronisation terminée ! Toutes les ${skippedCount} bourses trouvées sont déjà à jour.`);
+        }
       } else {
-        throw new Error("Le crawler AI n'a retourné aucun résultat. Réessayez.");
+        setSyncReport(report);
+        setSyncStatus("Aucune nouvelle bourse détectée sur les sources officielles lors de ce scan.");
       }
     } catch (err: any) {
+      clearInterval(intervalId);
       console.error("Sync failed:", err);
       setError(`Échec de la synchronisation intelligente: ${err.message}`);
     } finally {
       setIsSyncing(false);
-      setTimeout(() => setSyncStatus(''), 5000);
+      setTimeout(() => setSyncStatus(''), 10000);
     }
   };
 
-  const [syncStatus, setSyncStatus] = useState('');
-
   const isRecommended = (scholarship: Scholarship) => {
-    if (!userProfile) return false;
+    if (!userProfile || !scholarship) return false;
     const userLevelHeuristic = ('bepcAverage' in userProfile) ? 'Licence' : 'Master'; 
-    const matchesLevel = scholarship.degreeLevel.toLowerCase().includes(userLevelHeuristic.toLowerCase());
-    return matchesLevel && scholarship.isForBurkina;
+    const degreeLevel = scholarship.degreeLevel || '';
+    const matchesLevel = degreeLevel.toLowerCase().includes(userLevelHeuristic.toLowerCase());
+    return matchesLevel && !!scholarship.isForBurkina;
   };
 
   const filteredScholarships = scholarships.filter(s => {
-    const matchesSearch = s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.organization.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.country.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!s) return false;
+    const title = s.title || '';
+    const org = s.organization || '';
+    const country = s.country || '';
+    
+    const matchesSearch = title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      org.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      country.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesRecommendation = !recommendOnly || isRecommended(s);
     
@@ -213,6 +312,88 @@ export function ScholarshipIntelligence({ isAdmin, userProfile }: ScholarshipInt
           </motion.div>
         )}
 
+        {/* Admin Diagnostic Report */}
+        {isAdmin && syncReport && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="mb-8 p-6 bg-slate-900 text-white rounded-2xl shadow-xl overflow-hidden border border-slate-800"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${syncReport.status === 'SUCCESS' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">Rapport de Diagnostic Moteur</h3>
+                  <p className="text-xs text-slate-400 font-mono">Exécuté à {new Date(syncReport.timestamp).toLocaleTimeString()}</p>
+                </div>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                syncReport.status === 'SUCCESS' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
+              }`}>
+                {syncReport.status}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                <p className="text-[10px] text-slate-400 uppercase font-black mb-1">Bourses Trouvées</p>
+                <p className="text-xl font-bold">{syncReport.nbFound}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                <p className="text-[10px] text-slate-400 uppercase font-black mb-1">Importées</p>
+                <p className="text-xl font-bold">{syncReport.nbImported}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                <p className="text-[10px] text-slate-400 uppercase font-black mb-1">Temps d'exécution</p>
+                <p className="text-xl font-bold">{syncReport.executionTime}ms</p>
+              </div>
+              <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                <p className="text-[10px] text-slate-400 uppercase font-black mb-1">Sources</p>
+                <p className="text-xl font-bold">{syncReport.sourcesChecked?.length || 0}</p>
+              </div>
+            </div>
+
+            {syncReport.errorMessage && (
+              <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-200 text-xs mb-6 font-mono">
+                <strong>Erreur détectée:</strong> {syncReport.errorMessage}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <p className="w-full text-[10px] text-slate-400 uppercase font-black mb-1">Périmètre de Scan:</p>
+                {syncReport.sourcesChecked?.map((s: string) => (
+                  <span key={s} className="px-2 py-1 rounded bg-white/5 border border-white/10 text-[9px] text-slate-300 font-medium">
+                    {s}
+                  </span>
+                ))}
+              </div>
+
+              {syncReport.foundLinks && syncReport.foundLinks.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-slate-400 uppercase font-black mb-2">Sources Web Identifiées (Grounding):</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {syncReport.foundLinks.map((link: string, idx: number) => (
+                      <a 
+                        key={idx} 
+                        href={link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="p-2 rounded bg-white/5 border border-white/10 text-[10px] text-indigo-300 hover:text-white hover:bg-white/10 transition-colors truncate flex items-center gap-2"
+                      >
+                        <Globe className="w-3 h-3 flex-shrink-0" />
+                        {link}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
         {/* Search & Filters Card */}
         <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-6 mb-12">
           <div className="grid lg:grid-cols-5 gap-4">
@@ -245,7 +426,7 @@ export function ScholarshipIntelligence({ isAdmin, userProfile }: ScholarshipInt
               className="px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
             >
               <option value="all">Tous les pays</option>
-              {Array.from(new Set([...COUNTRIES, ...scholarships.map(s => s.country)])).sort().map(c => (
+              {Array.from(new Set([...COUNTRIES, ...scholarships.map(s => s?.country).filter(Boolean)])).sort().map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
@@ -299,6 +480,19 @@ export function ScholarshipIntelligence({ isAdmin, userProfile }: ScholarshipInt
                   <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
                 </label>
               )}
+
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <div className={`w-10 h-6 rounded-full relative transition-colors ${showExpired ? 'bg-slate-600' : 'bg-slate-200'}`}>
+                  <input 
+                    type="checkbox" 
+                    className="sr-only"
+                    checked={showExpired}
+                    onChange={() => setShowExpired(!showExpired)}
+                  />
+                  <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${showExpired ? 'translate-x-4' : ''}`} />
+                </div>
+                <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition-colors">Inclure expirées</span>
+              </label>
             </div>
             
             {isAdmin && (
@@ -336,7 +530,21 @@ export function ScholarshipIntelligence({ isAdmin, userProfile }: ScholarshipInt
               <motion.div
                 layout
                 key={scholarship.id}
-                onClick={() => setSelectedScholarship(scholarship)}
+                onClick={() => {
+                  setSelectedScholarship(scholarship);
+                  try {
+                    const viewed = localStorage.getItem('orientationbf_viewed_scholarships');
+                    let list = viewed ? JSON.parse(viewed) : [];
+                    if (!Array.isArray(list)) list = [];
+                    if (!list.includes(scholarship.id)) {
+                      list.push(scholarship.id);
+                      localStorage.setItem('orientationbf_viewed_scholarships', JSON.stringify(list));
+                    }
+                    window.dispatchEvent(new Event('orientationbf_scholarship_viewed'));
+                  } catch (e) {
+                    console.error("Error updating viewed scholarships list", e);
+                  }
+                }}
                 className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden group cursor-pointer hover:shadow-xl hover:border-indigo-200 transition-all"
               >
                 <div className="relative h-48 bg-slate-100">

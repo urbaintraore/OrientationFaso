@@ -203,6 +203,30 @@
         "date_creation": { "type": "string", "format": "date-time" }
       },
       "required": ["titre", "description", "domaine", "niveau", "type", "duree", "lieu", "date_debut", "date_fin", "image", "createur_id", "createur_type", "statut", "date_creation"]
+    },
+    "MarketplaceListing": {
+      "title": "Marketplace Listing",
+      "description": "Student listing for buying or selling books, didactic materials, vehicle, etc.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string", "enum": ["Livres scolaires & universitaires", "Matériel didactique", "Vélos & Motos", "Vie étudiante & Autres"] },
+        "condition": { "type": "string", "enum": ["Neuf", "Très bon état", "Bon état", "État satisfaisant"] },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "location": { "type": "string" },
+        "contact": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "sold", "reported", "deleted"] },
+        "reportsCount": { "type": "number" },
+        "reportedBy": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["userId", "title", "description", "price", "category", "condition", "location", "contact", "createdAt", "status"]
     }
   },
   "firestore": {
@@ -245,6 +269,10 @@
     "/formations/{formationId}": {
       "schema": { "$ref": "#/entities/Formation" },
       "description": "Stores academic and professional training programs (formations)"
+    },
+    "/marketplace_listings/{listingId}": {
+      "schema": { "$ref": "#/entities/MarketplaceListing" },
+      "description": "Stores student marketplace buy/sell listings"
     }
   }
 }

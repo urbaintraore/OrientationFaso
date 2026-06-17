@@ -54,7 +54,7 @@ export async function crawlInstitutions(region: string): Promise<any[]> {
   return response.json();
 }
 
-export async function crawlScholarshipMarket(academicYears: string[] = ['2025/2026', '2026/2027']): Promise<any[]> {
+export async function crawlScholarshipMarket(academicYears: string[] = ['2025/2026', '2026/2027']): Promise<{ data: any[], report: any }> {
   const response = await fetch(`${API_BASE}/crawl-scholarship-market`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
