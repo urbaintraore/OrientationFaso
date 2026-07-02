@@ -25,6 +25,44 @@ import { Formation, UserProfile } from '../types';
 import { formationService, DOMAINE_IMAGES, DEFAULT_FORMATION_IMAGE } from '../services/formationService';
 import { motion, AnimatePresence } from 'motion/react';
 
+const REGIONS_BURKINA = [
+  "Centre (Ouagadougou)",
+  "Hauts-Bassins (Bobo-Dioulasso)",
+  "Centre-Ouest (Koudougou)",
+  "Nord (Ouahigouya)",
+  "Est (Fada N'Gourma)",
+  "Boucle du Mouhoun (Dédougou)",
+  "Cascades (Banfora)",
+  "Centre-Est (Tenkodogo)",
+  "Centre-Nord (Kaya)",
+  "Centre-Sud (Manga)",
+  "Plateau-Central (Ziniaré)",
+  "Sahel (Dori)",
+  "Sud-Ouest (Gaoua)"
+];
+
+const TYPES_DIPLOME = [
+  "Certificat",
+  "BTS / Technicien",
+  "Licence",
+  "Master",
+  "Ingéniorat",
+  "Doctorat"
+];
+
+const SECTEURS_ACTIVITE = [
+  "Technologies de l'Information",
+  "Santé & Médical",
+  "Agriculture, Élevage & Agroalimentaire",
+  "Génie Électrique & Énergies",
+  "Génie Civil & Bâtiment (BTP)",
+  "Commerce, Gestion & Finance",
+  "Tourisme, Hôtellerie & Transport",
+  "Sciences Juridiques & Administratives",
+  "Art, Design, Artisanat & Mode",
+  "Enseignement & Recherche Sociale"
+];
+
 interface FormationsHubProps {
   userProfile: UserProfile | null;
   isAdmin: boolean;
@@ -49,6 +87,9 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
   const [filterPrixMax, setFilterPrixMax] = useState<number>(1500000);
   const [usePrixFilter, setUsePrixFilter] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterRegion, setFilterRegion] = useState<string>('');
+  const [filterTypeDiplome, setFilterTypeDiplome] = useState<string>('');
+  const [filterSecteurActivite, setFilterSecteurActivite] = useState<string>('');
 
   // Creation & Edition Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -65,6 +106,9 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
   const [formLieu, setFormLieu] = useState('');
   const [formDateDebut, setFormDateDebut] = useState('');
   const [formDateFin, setFormDateFin] = useState('');
+  const [formRegion, setFormRegion] = useState('Centre (Ouagadougou)');
+  const [formTypeDiplome, setFormTypeDiplome] = useState('Licence');
+  const [formSecteurActivite, setFormSecteurActivite] = useState("Technologies de l'Information");
   const [formError, setFormError] = useState<string | null>(null);
   const [formSaving, setFormSaving] = useState(false);
 
@@ -83,6 +127,9 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
       if (filterType) filters.type = filterType;
       if (filterLieu) filters.lieu = filterLieu;
       if (usePrixFilter) filters.prixMax = filterPrixMax;
+      if (filterRegion) filters.region = filterRegion;
+      if (filterTypeDiplome) filters.type_diplome = filterTypeDiplome;
+      if (filterSecteurActivite) filters.secteur_activite = filterSecteurActivite;
       
       const results = await formationService.getFormations(filters);
       
@@ -117,7 +164,7 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
 
   useEffect(() => {
     fetchFormationsList();
-  }, [activeTab, filterDomaine, filterNiveau, filterType, filterLieu, filterPrixMax, usePrixFilter, searchQuery, userProfile]);
+  }, [activeTab, filterDomaine, filterNiveau, filterType, filterLieu, filterPrixMax, usePrixFilter, searchQuery, filterRegion, filterTypeDiplome, filterSecteurActivite, userProfile]);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
@@ -143,6 +190,9 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
       setFormLieu(formationToEdit.lieu);
       setFormDateDebut(formationToEdit.date_debut);
       setFormDateFin(formationToEdit.date_fin);
+      setFormRegion(formationToEdit.region || 'Centre (Ouagadougou)');
+      setFormTypeDiplome(formationToEdit.type_diplome || 'Licence');
+      setFormSecteurActivite(formationToEdit.secteur_activite || "Technologies de l'Information");
     } else {
       setEditingFormation(null);
       setFormTitre('');
@@ -155,6 +205,9 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
       setFormLieu('');
       setFormDateDebut('');
       setFormDateFin('');
+      setFormRegion('Centre (Ouagadougou)');
+      setFormTypeDiplome('Licence');
+      setFormSecteurActivite("Technologies de l'Information");
     }
     setFormError(null);
     setIsModalOpen(true);
@@ -184,6 +237,9 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
       lieu: formLieu,
       date_debut: formDateDebut,
       date_fin: formDateFin,
+      region: formRegion,
+      type_diplome: formTypeDiplome,
+      secteur_activite: formSecteurActivite,
     };
 
     try {
@@ -414,6 +470,51 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
                 />
               </div>
 
+              {/* Région */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Région (Burkina Faso)</label>
+                <select
+                  value={filterRegion}
+                  onChange={(e) => setFilterRegion(e.target.value)}
+                  className="w-full py-2 px-3 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Toutes les régions</option>
+                  {REGIONS_BURKINA.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Type de diplôme */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Type de Diplôme</label>
+                <select
+                  value={filterTypeDiplome}
+                  onChange={(e) => setFilterTypeDiplome(e.target.value)}
+                  className="w-full py-2 px-3 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Tous les diplômes</option>
+                  {TYPES_DIPLOME.map(td => (
+                    <option key={td} value={td}>{td}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Secteur d'activité */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Secteur d'Activité</label>
+                <select
+                  value={filterSecteurActivite}
+                  onChange={(e) => setFilterSecteurActivite(e.target.value)}
+                  className="w-full py-2 px-3 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Tous les secteurs</option>
+                  {SECTEURS_ACTIVITE.map(sect => (
+                    <option key={sect} value={sect}>{sect}</option>
+                  ))}
+                </select>
+              </div>
+
               {/* Price Range Slider */}
               <div className="pt-2">
                 <div className="flex items-center justify-between mb-1.5">
@@ -450,6 +551,9 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
                   setFilterNiveau('');
                   setFilterType('');
                   setFilterLieu('');
+                  setFilterRegion('');
+                  setFilterTypeDiplome('');
+                  setFilterSecteurActivite('');
                   setUsePrixFilter(false);
                   setSearchQuery('');
                 }}
@@ -545,6 +649,30 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
                   </div>
                 </div>
               </div>
+
+              {/* Secondary Highlights for custom label tags */}
+              {(selectedFormation.region || selectedFormation.type_diplome || selectedFormation.secteur_activite) && (
+                <div className="px-6 py-3 bg-indigo-50/30 border-b border-indigo-100/40 flex flex-wrap gap-5 text-xs font-semibold text-slate-600">
+                  {selectedFormation.region && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-indigo-600 font-bold">📍 Région :</span>
+                      <strong className="text-slate-900 font-extrabold">{selectedFormation.region}</strong>
+                    </div>
+                  )}
+                  {selectedFormation.type_diplome && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-indigo-600 font-bold">🎓 Diplôme préparé :</span>
+                      <strong className="text-slate-900 font-extrabold">{selectedFormation.type_diplome}</strong>
+                    </div>
+                  )}
+                  {selectedFormation.secteur_activite && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-indigo-600 font-bold">💼 Secteur :</span>
+                      <strong className="text-slate-900 font-extrabold">{selectedFormation.secteur_activite}</strong>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Main Contents */}
               <div className="p-8 grid md:grid-cols-[1fr_300px] gap-8">
@@ -649,6 +777,9 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
                       setFilterNiveau('');
                       setFilterType('');
                       setFilterLieu('');
+                      setFilterRegion('');
+                      setFilterTypeDiplome('');
+                      setFilterSecteurActivite('');
                       setUsePrixFilter(false);
                       setSearchQuery('');
                     }}
@@ -708,6 +839,25 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
                         <h3 className="font-extrabold text-slate-900 text-base leading-tight group-hover:text-indigo-600 transition-colors line-clamp-1">
                           {fn.titre}
                         </h3>
+
+                        {/* Badges pour Région, Diplôme et Secteur */}
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {fn.type_diplome && (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-800 font-extrabold text-[9px] rounded-lg">
+                              🎓 {fn.type_diplome}
+                            </span>
+                          )}
+                          {fn.region && (
+                            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-extrabold text-[9px] rounded-lg">
+                              📍 {fn.region.split("(")[0].trim()}
+                            </span>
+                          )}
+                          {fn.secteur_activite && (
+                            <span className="px-2 py-0.5 bg-amber-50 text-amber-850 font-extrabold text-[9px] rounded-lg">
+                              💼 {fn.secteur_activite}
+                            </span>
+                          )}
+                        </div>
 
                         <p className="text-slate-500 text-xs leading-relaxed line-clamp-2">
                           {fn.description}
@@ -895,6 +1045,48 @@ export function FormationsHub({ userProfile, isAdmin, isEstablishment, onBackToH
                       onChange={(e) => setFormDateFin(e.target.value)}
                       className="w-full px-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
+                  </div>
+                </div>
+
+                {/* Région, Diplôme, Secteur d'activité Form Selection */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Région *</label>
+                    <select
+                      value={formRegion}
+                      onChange={(e) => setFormRegion(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {REGIONS_BURKINA.map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Type de Diplôme *</label>
+                    <select
+                      value={formTypeDiplome}
+                      onChange={(e) => setFormTypeDiplome(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {TYPES_DIPLOME.map(td => (
+                        <option key={td} value={td}>{td}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Secteur d'Activité *</label>
+                    <select
+                      value={formSecteurActivite}
+                      onChange={(e) => setFormSecteurActivite(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {SECTEURS_ACTIVITE.map(sect => (
+                        <option key={sect} value={sect}>{sect}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

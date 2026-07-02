@@ -8,6 +8,7 @@ export interface AppNotification {
   category: 'scholarship' | 'news' | 'system' | 'establishment';
   link?: string;
   target?: 'all' | 'students' | 'parents' | 'bacheliers';
+  userId?: string;
   createdAt: any;
   isRead?: boolean;
 }

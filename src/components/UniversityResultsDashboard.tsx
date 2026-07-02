@@ -49,6 +49,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { RecommendationRating } from './RecommendationRating';
 import { evaluateBacOrientation, getSubjectScore } from '../services/pedagogicalEngine';
+import { ParentFollowUpView } from './ParentFollowUpView';
 
 interface UniversityResultsDashboardProps {
   result: UniversityAnalysisResult;
@@ -290,6 +291,7 @@ const getSynchronizedCalendarEvents = (result: UniversityAnalysisResult, profile
 
 export function UniversityResultsDashboard({ result, profile, onReset, hasPaid: initialHasPaid, onUpgrade, onSave }: UniversityResultsDashboardProps) {
   const hasPaid = true; // Always unlocked for printing and complete premium viewing
+  const [activeTab, setActiveTab] = useState<'student' | 'parents'>('student');
   console.log("UniversityResultsDashboard rendering with result:", result);
   const contentRef = useRef<HTMLDivElement>(null);
   const [filterType, setFilterType] = useState<string>('Tous');
@@ -882,7 +884,32 @@ export function UniversityResultsDashboard({ result, profile, onReset, hasPaid: 
         </div>
       </div>
 
-      <div ref={contentRef} className="space-y-8 p-4 bg-white/50 rounded-3xl">
+      {/* Sub-navigation Tabs */}
+      <div className="flex border-b border-slate-200">
+        <button
+          onClick={() => setActiveTab('student')}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'student'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-850'
+          }`}
+        >
+          <GraduationCap className="h-4 w-4" /> Rapport Élève
+        </button>
+        <button
+          onClick={() => setActiveTab('parents')}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'parents'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-850'
+          }`}
+        >
+          👨‍👩‍👧‍👦 Espace Parents & Suivi Dédié
+        </button>
+      </div>
+
+      {activeTab === 'student' ? (
+        <div ref={contentRef} className="space-y-8 p-4 bg-white/50 rounded-3xl">
         {/* Main Recommendation Card */}
         <motion.div 
           initial={{ y: 20, opacity: 0 }}
@@ -1995,6 +2022,11 @@ export function UniversityResultsDashboard({ result, profile, onReset, hasPaid: 
           </motion.div>
         )}
       </div>
+      ) : (
+        <div className="space-y-8 p-4 bg-white/50 rounded-3xl">
+          <ParentFollowUpView profile={profile} result={result} isBac={true} />
+        </div>
+      )}
 
       <RecommendationRating 
         recommendationType="bac"

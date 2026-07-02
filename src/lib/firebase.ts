@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getStorage } from 'firebase/storage';
 
@@ -32,9 +32,31 @@ const firebaseConfig = {
 export const isFirebaseConfigured = !!getEnvVal(import.meta.env.VITE_FIREBASE_API_KEY, firebaseConfigJson.apiKey);
 
 const app = initializeApp(firebaseConfig);
+
+const dbSettings = {
+  experimentalForceLongPolling: true,
+  useFetchStreams: false
+};
+
 export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)"
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+  ? initializeFirestore(app, dbSettings, firebaseConfig.firestoreDatabaseId)
+  : initializeFirestore(app, dbSettings);
+
+// Enable local offline persistence for firestore to allow direct caching
+if (typeof window !== 'undefined') {
+  try {
+    enableIndexedDbPersistence(db).catch((err) => {
+      if (err.code === 'failed-precondition') {
+        console.warn('Firestore persistence failed-precondition (multiple tabs open)');
+      } else if (err.code === 'unimplemented') {
+        console.warn('Firestore persistence unimplemented (unsupported browser)');
+      }
+    });
+  } catch (err) {
+    console.warn('Could not enable Firestore persistence:', err);
+  }
+}
+
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
@@ -90,8 +112,16 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const isOffline = errMsg.toLowerCase().includes('offline') || 
+                    errMsg.toLowerCase().includes('unreachable') || 
+                    errMsg.toLowerCase().includes('unavailable') || 
+                    errMsg.toLowerCase().includes('network-request-failed') ||
+                    errMsg.toLowerCase().includes('could not reach') || 
+                    !navigator.onLine;
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -106,6 +136,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+
+  if (isOffline) {
+    console.info(`[Firestore Offline Cache Operation] Type: ${operationType} on path: ${path}. Operating gracefully from local persistence.`);
+  } else {
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+  }
+  
+  throw error; // throw original error so caller catching mechanisms and mock fallbacks function correctly
 }

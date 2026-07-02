@@ -52,6 +52,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { RecommendationRating } from './RecommendationRating';
 import { evaluateBepcOrientation, getSubjectScore } from '../services/pedagogicalEngine';
+import { ParentFollowUpView } from './ParentFollowUpView';
 
 interface ResultsDashboardProps {
   result: AnalysisResult;
@@ -207,6 +208,7 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid: initialHas
   const hasPaid = true; // Always unlocked for printing and complete premium viewing
   const contentRef = useRef<HTMLDivElement>(null);
   const [alertsEnabled, setAlertsEnabled] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<'student' | 'parents'>('student');
 
   // States for new side-by-side Series Comparator
   const defaultSeries1 = result?.recommendedSeries || "D";
@@ -775,7 +777,32 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid: initialHas
         </div>
       </div>
 
-      <div ref={contentRef} className="space-y-8 p-4 bg-white/50 rounded-3xl">
+      {/* Sub-navigation Tabs */}
+      <div className="flex border-b border-slate-200">
+        <button
+          onClick={() => setActiveTab('student')}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'student'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-850'
+          }`}
+        >
+          <GraduationCap className="h-4 w-4" /> Rapport Élève
+        </button>
+        <button
+          onClick={() => setActiveTab('parents')}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'parents'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-850'
+          }`}
+        >
+          👨‍👩‍👧‍👦 Espace Parents & Suivi Dédié
+        </button>
+      </div>
+
+      {activeTab === 'student' ? (
+        <div ref={contentRef} className="space-y-8 p-4 bg-white/50 rounded-3xl">
         {/* Main Recommendation Card */}
         <motion.div 
           initial={{ y: 20, opacity: 0 }}
@@ -1738,6 +1765,11 @@ export function ResultsDashboard({ result, profile, onReset, hasPaid: initialHas
           </motion.div>
         )}
       </div>
+      ) : (
+        <div className="space-y-8 p-4 bg-white/50 rounded-3xl">
+          <ParentFollowUpView profile={profile} result={result} isBac={false} />
+        </div>
+      )}
 
       <RecommendationRating 
         recommendationType="bepc"

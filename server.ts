@@ -17,7 +17,8 @@ import {
   crawlCareerOpportunities,
   extractAcademicData,
   refreshInstitution,
-  generateQuizAi
+  generateQuizAi,
+  generateFaqResponse
 } from "./src/server/geminiBackend.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -208,6 +209,61 @@ app.post("/api/gemini/quiz", async (req, res) => {
   try {
     const result = await generateQuizAi(req.body);
     res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/gemini/faq", async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question) {
+      return res.status(400).json({ error: "Le champ 'question' est requis." });
+    }
+    const result = await generateFaqResponse(question);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Email subscription and key orientation dates reminder
+app.post("/api/reminders/subscribe", async (req, res) => {
+  try {
+    const { email, phone, targetSegment, eventsToNotify } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "L'adresse email est requise pour s'abonner." });
+    }
+
+    console.log(`[Rappel Email / Cloud Functions] Inscription de ${email} (${phone || 'sans tél'}) pour les alertes :`, targetSegment, eventsToNotify);
+
+    // Simulated email dispatch representing the Firebase Cloud Function triggering
+    const mockEmailTemplate = `
+      ======================================================
+      [RAPPEL CLOUD FUNCTION] Simulation d'envoi d'email :
+      Destinataire : ${email}
+      Objet : Confirmation d'Abonnement aux Échéances Officielles de l'Orientation
+      ------------------------------------------------------
+      Félicitations ! Vous recevrez des alertes par email et SMS pour :
+      ${Array.isArray(eventsToNotify) ? eventsToNotify.join(', ') : 'Toutes les échéances'}
+      
+      Rappel des dates clés au Burkina Faso :
+      • Ouverture Campus Faso : Début Août 2026
+      • Fin Dépôt CIOSPB : 31 Juillet 2026
+      • Dépôt dossiers eConcours : Courant Juillet - Août 2026
+      ======================================================
+    `;
+    console.log(mockEmailTemplate);
+
+    res.json({
+      success: true,
+      message: "Abonnement enregistré avec succès ! Un e-mail de confirmation a été simulé par notre fonction cloud.",
+      details: {
+        email,
+        subscribedAt: new Date().toISOString(),
+        events: eventsToNotify
+      }
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

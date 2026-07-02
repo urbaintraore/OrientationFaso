@@ -39,13 +39,14 @@ import { auth, db, isFirebaseConfigured } from '../../lib/firebase';
 import { MarketTrendsDashboard } from './MarketTrendsDashboard';
 import { SchoolStudentsPanel } from './SchoolStudentsPanel';
 import { FileUploader } from '../FileUploader';
+import { CandidacyManagementPanel } from './CandidacyManagementPanel';
 
 interface EstablishmentDashboardProps {
   onBack: () => void;
 }
 
 export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'ufrs' | 'programs' | 'posts' | 'trends' | 'settings' | 'students'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'ufrs' | 'programs' | 'posts' | 'trends' | 'settings' | 'students' | 'candidatures'>('overview');
   const [institution, setInstitution] = useState<Institution | null>(null);
   const [ufrs, setUfrs] = useState<UFR[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -299,6 +300,7 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
 
   const tabs = isSchool ? [
     { id: 'overview', icon: LayoutDashboard, label: 'Aperçu' },
+    { id: 'candidatures', icon: FileText, label: 'Dossiers Candidats' },
     { id: 'students', icon: Users, label: 'Élèves Inscrits' },
     { id: 'programs', icon: FileText, label: 'Séries & Formations' },
     { id: 'posts', icon: FileText, label: 'Publications' },
@@ -306,6 +308,7 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
     { id: 'settings', icon: Settings, label: 'Profil Établissement' },
   ] : [
     { id: 'overview', icon: LayoutDashboard, label: 'Aperçu' },
+    { id: 'candidatures', icon: FileText, label: 'Dossiers Candidats' },
     { id: 'ufrs', icon: GraduationCap, label: 'UFR & Facultés' },
     { id: 'programs', icon: FileText, label: 'Filières' },
     { id: 'posts', icon: Users, label: 'Actualités' },
@@ -508,6 +511,10 @@ export function EstablishmentDashboard({ onBack }: EstablishmentDashboardProps) 
 
           {activeTab === 'programs' && (
              <ProgramManagement institutionId={institution.id} ufrs={ufrs} />
+          )}
+
+          {activeTab === 'candidatures' && (
+             <CandidacyManagementPanel institutionId={institution.id} institutionName={institution.name} />
           )}
 
           {activeTab === 'students' && (

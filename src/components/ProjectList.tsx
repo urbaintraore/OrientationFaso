@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { SavedProject } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { FolderOpen, Trash2, Calendar, User, GraduationCap, School, ArrowRight, AlertTriangle, Heart, BookOpen, ExternalLink } from 'lucide-react';
+import { FolderOpen, Trash2, Calendar, User, GraduationCap, School, ArrowRight, AlertTriangle, Heart, BookOpen, ExternalLink, FileText } from 'lucide-react';
 import { mockInstitutions } from '../data/mockInstitutions';
 import { Institution, GovernmentOpportunity } from '../types';
 import { governmentOpportunityService } from '../services/governmentOpportunityService';
+import { CandidacyDossierManager } from './CandidacyDossierManager';
 
 interface ProjectListProps {
   projects: SavedProject[];
@@ -15,7 +16,7 @@ interface ProjectListProps {
 
 export function ProjectList({ projects, onSelectProject, onDeleteProject, onNewProject }: ProjectListProps) {
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'projects' | 'favorites'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'favorites' | 'candidature'>('projects');
   const [favoriteInstitutions, setFavoriteInstitutions] = useState<string[]>([]);
   const [favoriteScholarships, setFavoriteScholarships] = useState<string[]>([]);
   const [favoriteProjectIds, setFavoriteProjectIds] = useState<string[]>([]);
@@ -118,6 +119,18 @@ export function ProjectList({ projects, onSelectProject, onDeleteProject, onNewP
           </div>
           {activeTab === 'favorites' && (
             <motion.div layoutId="activeTabIndicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-rose-600" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('candidature')}
+          className={`pb-4 px-4 font-semibold text-sm transition-colors relative ${activeTab === 'candidature' ? 'text-teal-600 font-bold' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-teal-600" />
+            Dossier de candidature
+          </div>
+          {activeTab === 'candidature' && (
+            <motion.div layoutId="activeTabIndicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />
           )}
         </button>
       </div>
@@ -321,6 +334,16 @@ export function ProjectList({ projects, onSelectProject, onDeleteProject, onNewP
               )}
             </div>
           )}
+        </motion.div>
+      )}
+
+      {activeTab === 'candidature' && (
+        <motion.div
+           initial={{ opacity: 0 }}
+           animate={{ opacity: 1 }}
+           exit={{ opacity: 0 }}
+        >
+          <CandidacyDossierManager />
         </motion.div>
       )}
 

@@ -1864,3 +1864,148 @@ Génère le résultat UNIQUEMENT sous forme de JSON correspondant à ce schéma 
     throw new Error("Erreur de génération des questions: " + error.message);
   }
 }
+
+export async function generateFaqResponse(userQuestion: string): Promise<{ answer: string; relatedLinks?: { text: string; url: string }[] }> {
+  const hasKey = isKeyConfigured();
+  
+  if (!hasKey) {
+    console.warn("[FAQ system - Offline / no API key]");
+    return getOfflineFaqAnswer(userQuestion);
+  }
+
+  const systemInstruction = `
+You are an expert academic and vocational orientation counselor in Burkina Faso.
+Your goal is to answer questions about:
+1. Orientation post-BEPC (Séries A, C, E, AA, AB, BAC-pro, etc.).
+2. Orientation post-BAC (Universités publiques : Université Joseph Ki-Zerbo, Université Thomas Sankara, Université Nazé Boni, Université de Koudougou, etc., and filières).
+3. Bourses d'études et aides du CIOSPB (bourses locales, bourses de coopération, aides FOPRES).
+4. Les concours directs et professionnels de la fonction publique (via le portail eConcours / econcours.gov.bf).
+5. Calendrier scolaire, inscription aux examens officiels et dépôts de dossiers de candidature aux bourses.
+
+Provide a clear, helpful, and localized response in French in a warm, welcoming markdown format.
+Keep the answers accurate, referencing actual entities (MENAPLN, MESRSI, CIOSPB, DGRE, ENAM, ENSP, IDS, etc.) when appropriate.
+Provide up to 3 links if relevant to official websites like "https://www.ciospb.gov.bf", "https://www.econcours.gov.bf", "https://www.messfh.gov.bf".
+Do not use legacy object text methods like .text(). Access .text directly.
+`;
+
+  try {
+    const payload = {
+      model: "gemini-3.5-flash",
+      contents: userQuestion,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+      }
+    };
+    
+    const response = await callGeminiWithRetry("gemini-3.5-flash", payload, 2);
+    const text = response.text || "Désolé, l'IA n'a pas pu formuler une réponse à cette question.";
+    
+    const relatedLinks: { text: string; url: string }[] = [];
+    if (text.toLowerCase().includes("bourse") || text.toLowerCase().includes("ciospb")) {
+      relatedLinks.push({ text: "Portail Officiel du CIOSPB", url: "https://www.ciospb.gov.bf" });
+    }
+    if (text.toLowerCase().includes("concours") || text.toLowerCase().includes("fonction publique")) {
+      relatedLinks.push({ text: "Portail eConcours Burkina", url: "https://www.econcours.gov.bf" });
+    }
+    if (text.toLowerCase().includes("ki-zerbo") || text.toLowerCase().includes("ujkz") || text.toLowerCase().includes("campus faso")) {
+      relatedLinks.push({ text: "Plateforme Campus Faso", url: "https://www.campusfaso.bf" });
+    }
+
+    return {
+      answer: text,
+      relatedLinks: relatedLinks.length > 0 ? relatedLinks : [
+        { text: "Portail du CIOSPB", url: "https://www.ciospb.gov.bf" }
+      ]
+    };
+  } catch (error: any) {
+    console.error("[FAQ Error] Gemini API Error:", error.message);
+    return getOfflineFaqAnswer(userQuestion);
+  }
+}
+
+function getOfflineFaqAnswer(question: string): { answer: string; relatedLinks?: { text: string; url: string }[] } {
+  const qClean = question.toLowerCase();
+  
+  if (qClean.includes("bourse") || qClean.includes("aide") || qClean.includes("ciospb") || qClean.includes("foser")) {
+    return {
+      answer: `### Bourses et Aides Financières au Burkina Faso (CIOSPB & FOSER)
+
+Au Burkina Faso, la gestion des bourses nationales et de coopération est assurée principalement par le **CIOSPB** (*Centre National de l'Information, de l'Orientation Scolaire et Professionnelle et des Bourses*).
+
+1. **Bourse Nationale de Premier Cycle (Université)** :
+   * **Éligibilité** : Être de nationalité burkinabè, avoir obtenu le baccalauréat au cours de l'année en cours (généralement mention Bien ou Très Bien exigée, moyenne minimale déterminée annuellement par une commission publique).
+   * **Âge limite** : Généralement moins de 22 ans pour le premier cycle universitaire.
+   
+2. **Aide Financière (FOPRES / FONER)** :
+   * Si vous n'êtes pas bénéficiaire de la bourse complète, vous pouvez solliciter l'aide de rentrée universitaire ou le prêt d'étude remboursable. Ces subventions aident à payer l'hébergement et les frais de scolarité dans les universités publiques.
+
+3. **Subventions Scientifiques (FOSER)** :
+   * Le **FOSER** finance les micro-bourses de stage ou d'études pour la recherche scientifique appliquée en physique, agronomie ou technologies solaires.`,
+      relatedLinks: [
+        { text: "Portail Officiel du CIOSPB (Bourses)", url: "https://www.ciospb.gov.bf" },
+        { text: "Fonds de Soutien (FOSER)", url: "https://foser.bf" }
+      ]
+    };
+  }
+  
+  if (qClean.includes("concours") || qClean.includes("direct") || qClean.includes("fonction publique") || qClean.includes("econcours")) {
+    return {
+      answer: `### Procédures des Concours Directs au Burkina Faso (eConcours)
+
+Les recrutements de la Fonction Publique de l'État sont rationalisés grâce au portail numérique officiel **eConcours** de la DGRE.
+
+1. **Période d'ouverture** : Courant mai à juillet de chaque année scolaire.
+2. **Méthode d'inscription** :
+   * Exclusivement en ligne via le site Web **econcours.gov.bf**.
+   * Le candidat s'enrôle avec son numéro de téléphone mobile et sa pièce d'identité (CNIB).
+3. **Niveaux requis** :
+   * **CEP / BEPC** : Métiers administratifs subalternes, instituteurs adjoints d'école préscolaire, agents de liaison.
+   * **BAC / Licence / Master** : Administrateurs civils de l'ENAM, inspecteurs du travail, officiers de police, conseillers de jeunesse, etc.
+4. **Pièces pour postuler** : CNIB, attestation ou diplôme d'État en cours de validité.`,
+      relatedLinks: [
+        { text: "Portail Officiel eConcours", url: "https://www.econcours.gov.bf" },
+        { text: "Ministère de la Fonction Publique", url: "https://www.fonction-publique.gov.bf" }
+      ]
+    };
+  }
+
+  if (qClean.includes("bepc") || qClean.includes("bac") || qClean.includes("série") || qClean.includes("filière")) {
+    return {
+      answer: `### Procédures d'Orientation Post-BEPC et Post-BAC au Burkina Faso
+
+L'orientation académique s'articule autour de deux transitions fondamentales :
+
+1. **Orientation Post-BEPC (Entrée en classe de Seconde)** :
+   * **Séries Générales** : Seconde C (focalisation forte sur les Mathématiques, Physique/Chimie) ou Seconde A (Lettres, Philosophie, Anglais, Allemand/Espagnol).
+   * **Écoles Techniques et Professionnelles (Lycées Professionnels)** : Filières tertiaires (Secrétariat, Comptabilité - Séries AB/G1/G2) ou Filières industrielles (Électrotechnique, Mécanique, Génie Civil, Agriculture - Séries F1, F2, F3, F4).
+
+2. **Orientation Post-BAC (Accès aux Universités)** :
+   * Les bacheliers s'inscrivent de façon centralisée via le portail **Campus Faso**.
+   * Les filières de l'Université Joseph Ki-Zerbo (médecine, sciences appliquées) et de l'Université Thomas Sankara (économie, droit) sont attribuées selon les notes du BAC et le nombre de places disponibles.`,
+      relatedLinks: [
+        { text: "Plateforme Nationale Campus Faso", url: "https://www.campusfaso.bf" },
+        { text: "La Direction du CIOSPB", url: "https://www.ciospb.gov.bf" }
+      ]
+    };
+  }
+
+  // General FAQ response
+  return {
+    answer: `### Guide Pratique de l'Orientation au Burkina Faso
+
+Bienvenue sur la Foire Aux Questions interactive alimentée par l'Intelligence Artificielle de la plateforme nationale d'orientation.
+
+**Questions fréquentes que vous pouvez poser :**
+* *Quelles sont les bourses disponibles après le BAC au Burkina Faso et comment postuler ?*
+* *Comment s'inscrire en ligne aux Concours Directs de la Fonction Publique (eConcours) ?*
+* *Quelle est la différence d'orientation entre la Seconde C et la Seconde T (Lycée technique) ?*
+* *Comment fonctionne la répartition des bacheliers sur Campus Faso pour les universités publiques ?*
+
+Pour toute autre question, n'hésitez pas à la formuler de manière claire et notre conseiller virtuel IA vous apportera une réponse adaptée au contexte burkinabè.`,
+    relatedLinks: [
+      { text: "Portail Campus Faso", url: "https://www.campusfaso.bf" },
+      { text: "Portail du CIOSPB", url: "https://www.ciospb.gov.bf" }
+    ]
+  };
+}

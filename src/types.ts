@@ -398,6 +398,9 @@ export interface Formation {
   createur_type: 'admin' | 'etablissement';
   statut: 'brouillon' | 'publie' | 'archive';
   date_creation: string;
+  region?: string;
+  type_diplome?: string;
+  secteur_activite?: string;
 }
 
 export interface MarketplaceListing {
@@ -417,6 +420,47 @@ export interface MarketplaceListing {
   status: 'active' | 'sold' | 'reported' | 'deleted';
   reportsCount?: number;
   reportedBy?: string[]; // Array of userIds who reported to prevent multiple reports from same user
+}
+
+export interface CandidacyDossier {
+  id: string;
+  userId: string;
+  institutionId: string;
+  institutionName: string;
+  programId: string;
+  programName: string;
+  status: 'Brouillon' | 'Soumis' | 'En cours d\'examen' | 'Accepté' | 'Refusé';
+  createdAt: string;
+  updatedAt: string;
+  studentName?: string;
+  studentEmail?: string;
+  studentPhone?: string;
+  studentBacSeries?: string;
+  feedback?: string;
+  documents: {
+    bulletins?: string; // Base64 content
+    attestationBac?: string; // Base64 content
+    cv?: string; // Base64 content
+    lettreMotivation?: string; // Base64 content
+    acteNaissance?: string; // Base64 content
+    autres?: string; // Base64 content
+  };
+  documentNames: {
+    bulletins?: string;
+    attestationBac?: string;
+    cv?: string;
+    lettreMotivation?: string;
+    acteNaissance?: string;
+    autres?: string;
+  };
+  messages?: {
+    id: string;
+    sender: 'student' | 'institution';
+    senderName: string;
+    text: string;
+    createdAt: string;
+    documentKey?: string; // S'il s'agit d'un retour sur un document spécifique
+  }[];
 }
 
 

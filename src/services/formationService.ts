@@ -55,7 +55,10 @@ let mockFormations: Formation[] = [
     createur_id: "demo-admin",
     createur_type: "admin",
     statut: "publie",
-    date_creation: "2026-05-30T10:00:00.000Z"
+    date_creation: "2026-05-30T10:00:00.000Z",
+    region: "Centre (Ouagadougou)",
+    type_diplome: "Licence",
+    secteur_activite: "Technologies de l'Information"
   },
   {
     id: "demo-f2",
@@ -73,7 +76,10 @@ let mockFormations: Formation[] = [
     createur_id: "demo-etab-1",
     createur_type: "etablissement",
     statut: "publie",
-    date_creation: "2026-05-29T14:30:00.000Z"
+    date_creation: "2026-05-29T14:30:00.000Z",
+    region: "Hauts-Bassins",
+    type_diplome: "BTS / Technicien",
+    secteur_activite: "Génie Électrique & Énergies"
   },
   {
     id: "demo-f3",
@@ -91,7 +97,31 @@ let mockFormations: Formation[] = [
     createur_id: "demo-etab-1",
     createur_type: "etablissement",
     statut: "brouillon",
-    date_creation: "2026-05-31T09:15:00.000Z"
+    date_creation: "2026-05-31T09:15:00.000Z",
+    region: "Centre-Ouest",
+    type_diplome: "Certificat",
+    secteur_activite: "Agriculture, Élevage & Agroalimentaire"
+  },
+  {
+    id: "demo-f4",
+    titre: "Master de Recherche en Santé Publique",
+    description: "Formez-vous aux enjeux de santé communautaire, d'épidémiologie et de gestion des politiques sanitaires en Afrique de l'Ouest.",
+    domaine: "Santé",
+    niveau: "Avancé",
+    type: "Présentiel",
+    duree: "2 ans",
+    prix: 800000,
+    lieu: "Ouagadougou - Faculté de Santé",
+    date_debut: "2026-10-15",
+    date_fin: "2028-06-30",
+    image: DOMAINE_IMAGES["Santé"],
+    createur_id: "demo-etab-1",
+    createur_type: "etablissement",
+    statut: "publie",
+    date_creation: "2026-05-28T08:00:00.000Z",
+    region: "Centre (Ouagadougou)",
+    type_diplome: "Master",
+    secteur_activite: "Santé & Médical"
   }
 ];
 
@@ -106,6 +136,9 @@ export const formationService = {
     lieu?: string;
     prixMax?: number;
     statut?: string;
+    region?: string;
+    type_diplome?: string;
+    secteur_activite?: string;
   }): Promise<Formation[]> {
     if (!isFirebaseConfigured) {
       console.log("Using Mock Formations - Firebase not configured");
@@ -117,6 +150,9 @@ export const formationService = {
         if (filters.lieu) list = list.filter(f => f.lieu.toLowerCase().includes(filters.lieu!.toLowerCase()));
         if (filters.prixMax !== undefined) list = list.filter(f => !f.prix || f.prix <= filters.prixMax!);
         if (filters.statut) list = list.filter(f => f.statut === filters.statut);
+        if (filters.region) list = list.filter(f => f.region === filters.region);
+        if (filters.type_diplome) list = list.filter(f => f.type_diplome === filters.type_diplome);
+        if (filters.secteur_activite) list = list.filter(f => f.secteur_activite === filters.secteur_activite);
       }
       return list;
     }
@@ -138,6 +174,9 @@ export const formationService = {
         if (filters.lieu) list = list.filter(f => f.lieu.toLowerCase().includes(filters.lieu!.toLowerCase()));
         if (filters.prixMax !== undefined) list = list.filter(f => !f.prix || f.prix <= filters.prixMax!);
         if (filters.statut) list = list.filter(f => f.statut === filters.statut);
+        if (filters.region) list = list.filter(f => f.region === filters.region);
+        if (filters.type_diplome) list = list.filter(f => f.type_diplome === filters.type_diplome);
+        if (filters.secteur_activite) list = list.filter(f => f.secteur_activite === filters.secteur_activite);
       }
       return list;
     } catch (error) {
@@ -156,11 +195,24 @@ export const formationService = {
     type?: string;
     lieu?: string;
     prixMax?: number;
+    region?: string;
+    type_diplome?: string;
+    secteur_activite?: string;
   }) {
     if (!isFirebaseConfigured) {
       // Mode simulation hors-ligne immédiat
-      const initialList = mockFormations.filter(f => f.statut === 'publie');
-      callback(initialList);
+      let list = mockFormations.filter(f => f.statut === 'publie');
+      if (filters) {
+        if (filters.domaine) list = list.filter(f => f.domaine === filters.domaine);
+        if (filters.niveau) list = list.filter(f => f.niveau === filters.niveau);
+        if (filters.type) list = list.filter(f => f.type === filters.type);
+        if (filters.lieu) list = list.filter(f => f.lieu.toLowerCase().includes(filters.lieu!.toLowerCase()));
+        if (filters.prixMax !== undefined) list = list.filter(f => !f.prix || f.prix <= filters.prixMax!);
+        if (filters.region) list = list.filter(f => f.region === filters.region);
+        if (filters.type_diplome) list = list.filter(f => f.type_diplome === filters.type_diplome);
+        if (filters.secteur_activite) list = list.filter(f => f.secteur_activite === filters.secteur_activite);
+      }
+      callback(list);
       return () => {};
     }
 
@@ -181,6 +233,9 @@ export const formationService = {
         if (filters.type) list = list.filter(f => f.type === filters.type);
         if (filters.lieu) list = list.filter(f => f.lieu.toLowerCase().includes(filters.lieu!.toLowerCase()));
         if (filters.prixMax !== undefined) list = list.filter(f => !f.prix || f.prix <= filters.prixMax!);
+        if (filters.region) list = list.filter(f => f.region === filters.region);
+        if (filters.type_diplome) list = list.filter(f => f.type_diplome === filters.type_diplome);
+        if (filters.secteur_activite) list = list.filter(f => f.secteur_activite === filters.secteur_activite);
       }
       callback(list);
     }, (error) => {
