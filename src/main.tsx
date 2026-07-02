@@ -108,31 +108,18 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-// Register the Service Worker for offline support in production, clean up in development
+// Proactively unregister any active service worker to avoid caching and white-screen issues on production hosts (like Vercel)
 if ('serviceWorker' in navigator) {
-  if (import.meta.env.PROD) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js')
-        .then((registration) => {
-          console.log('Service Worker registered successfully with scope:', registration.scope);
-        })
-        .catch((error) => {
-          console.error('Service Worker registration failed:', error);
-        });
-    });
-  } else {
-    // In development / sandbox, proactively unregister any active service worker to avoid caching conflicts
-    navigator.serviceWorker.getRegistrations().then((registrations) => {
-      for (const registration of registrations) {
-        registration.unregister().then((success) => {
-          if (success) {
-            console.log('Successfully unregistered active development Service Worker:', registration.scope);
-          }
-        });
-      }
-    }).catch((err) => {
-      console.warn('Error clearing service worker registrations:', err);
-    });
-  }
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister().then((success) => {
+        if (success) {
+          console.log('Successfully unregistered active Service Worker:', registration.scope);
+        }
+      });
+    }
+  }).catch((err) => {
+    console.warn('Error clearing service worker registrations:', err);
+  });
 }
 
