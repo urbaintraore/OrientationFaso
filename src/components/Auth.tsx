@@ -205,17 +205,7 @@ export function Auth({ onLogin }: AuthProps) {
         animate={{ opacity: 1, y: 0 }}
         className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100"
       >
-        {!isFirebaseConfigured && (
-          <div className="mb-6 text-xs text-amber-800 bg-amber-50 p-3.5 rounded-xl border border-amber-200 leading-relaxed">
-            <span className="font-semibold block mb-1">⚠️ Mode Démo active (Sans Firebase)</span>
-            Puisque la base de données Firebase n'est pas encore configurée, l'application fonctionne entièrement en <strong>mode local autonome</strong>.
-            Vous pouvez vous connecter librement avec n'importe quelle adresse e-mail ou le compte de test : 
-            <div className="mt-1 bg-white bg-opacity-60 p-1.5 rounded font-mono text-[10px] text-slate-700">
-              Email : admin@orientationbf.com <br/>
-              M.P. : admin123
-            </div>
-          </div>
-        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && !isResettingPassword && (
             <>
